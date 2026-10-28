@@ -14,7 +14,7 @@ function App() {
           <Route path="/knowledge" element={<KnowledgePage />} />
           <Route path="/interview" element={<InterviewPage />} />
           <Route path="/bank" element={<BankPage />} />
-          <Route path="/review/:sessionId" element={<ReviewPage />} />
+          <Route path="/review" element={<ReviewPage />} />
         </Routes>
       </Layout>
     </BrowserRouter>

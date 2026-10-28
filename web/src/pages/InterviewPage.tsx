@@ -7,6 +7,7 @@ import {
   finishInterview,
   getSessionInfo,
 } from '@/lib/api'
+import { setRecentSessionId } from '@/lib/recentInterview'
 import { toast } from '@/components/ui/toast'
 import { Spinner } from '@/components/ui/spinner'
 
@@ -100,8 +101,8 @@ export default function InterviewPage() {
 
       if (res.finished) {
         setFinished(true)
-        // 面试结束：保留 session_id，不强制跳转，也不清存储，
-        // 让「面试」页保留"查看本次复盘"入口（用户可自行决定何时去看）。
+        // 面试结束：记录"最近一场"，供复盘页读取；不强制跳转、不清存储
+        setRecentSessionId(sessionId)
       }
     } catch (e) {
       toast((e as Error).message, 'error')
@@ -116,9 +117,10 @@ export default function InterviewPage() {
     try {
       const res = await finishInterview(sessionId)
       setFinished(true)
-      // 保留 session_id，不跳转、不清存储，让用户可在本页点"查看本次复盘"
+      // 记录"最近一场"，供复盘页读取
+      setRecentSessionId(sessionId)
+      // 把分数暂存到 sessionStorage，复盘页可直接读取，避免再次调 finish
       if (res.score) {
-        // 把分数暂存到 sessionStorage，复盘页可直接读取，避免再次调 finish
         sessionStorage.setItem('interview_last_score', JSON.stringify(res.score))
       }
     } catch (e) {
@@ -126,6 +128,19 @@ export default function InterviewPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // 结束后面向"再来一场"：回到开始表单，让用户能重新选方向 / 留空随机
+  function handleReset() {
+    setSessionId(null)
+    setFinished(false)
+    setMessages([])
+    setQuestionCount(0)
+    setFollowupCount(0)
+    setInput('')
+    setTopic('')
+    sessionStorage.removeItem(SESSION_KEY)
+    sessionStorage.removeItem('interview_last_score')
   }
 
   // 恢复中：显示加载
@@ -199,12 +214,14 @@ export default function InterviewPage() {
             >
               结束面试
             </button>
-            <button
-              onClick={() => sessionId && navigate(`/review/${sessionId}`)}
-              className="rounded-md bg-primary px-3.5 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:opacity-90"
-            >
-              查看本次复盘
-            </button>
+            {finished && (
+              <button
+                onClick={() => sessionId && navigate('/review')}
+                className="rounded-md bg-primary px-3.5 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:opacity-90"
+              >
+                查看本次复盘
+              </button>
+            )}
           </div>
           <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-secondary">
             <div
@@ -261,33 +278,55 @@ export default function InterviewPage() {
         </div>
       </div>
 
-      {/* 输入区 */}
+      {/* 输入区 / 结束态操作区 */}
       <div className="shrink-0 px-6 pb-5">
-        <div className="mx-auto flex max-w-3xl items-end gap-3 rounded-lg border border-border bg-card p-2">
-          <textarea
-            placeholder={finished ? '面试已结束' : '输入你的回答…（Enter 发送，Shift+Enter 换行）'}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                handleSend()
-              }
-            }}
-            disabled={loading || finished}
-            rows={1}
-            className="max-h-32 min-h-12 flex-1 resize-none bg-transparent px-3 py-2.5 text-sm outline-none placeholder:text-muted-foreground"
-          />
-          <button
-            onClick={handleSend}
-            disabled={loading || finished || !input.trim()}
-            className="flex size-11 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground transition-colors hover:opacity-90 disabled:opacity-40"
-          >
-            <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="m22 2-7 20-4-9-9-4z" />
-            </svg>
-          </button>
-        </div>
+        {finished ? (
+          <div className="mx-auto max-w-3xl rounded-lg border border-border bg-card p-5">
+            <p className="text-center text-sm text-muted-foreground">
+              本场面试已结束
+            </p>
+            <div className="mt-4 flex justify-center gap-3">
+              <button
+                onClick={() => navigate('/review')}
+                className="rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:opacity-90"
+              >
+                查看本次复盘
+              </button>
+              <button
+                onClick={handleReset}
+                className="rounded-lg border border-border px-6 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
+              >
+                再来一场
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="mx-auto flex max-w-3xl items-end gap-3 rounded-lg border border-border bg-card p-2">
+            <textarea
+              placeholder="输入你的回答…（Enter 发送，Shift+Enter 换行）"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  handleSend()
+                }
+              }}
+              disabled={loading}
+              rows={1}
+              className="max-h-32 min-h-12 flex-1 resize-none bg-transparent px-3 py-2.5 text-sm outline-none placeholder:text-muted-foreground"
+            />
+            <button
+              onClick={handleSend}
+              disabled={loading || !input.trim()}
+              className="flex size-11 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground transition-colors hover:opacity-90 disabled:opacity-40"
+            >
+              <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="m22 2-7 20-4-9-9-4z" />
+              </svg>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

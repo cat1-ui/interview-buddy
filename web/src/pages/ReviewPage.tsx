@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import {
   getReview,
@@ -8,6 +8,7 @@ import {
   type ReviewResponse,
   type ScoreResult,
 } from '@/lib/api'
+import { getRecentSessionId } from '@/lib/recentInterview'
 import { toast } from '@/components/ui/toast'
 import { Spinner } from '@/components/ui/spinner'
 
@@ -18,9 +19,12 @@ const DIMENSIONS = [
 ] as const
 
 export default function ReviewPage() {
-  const { sessionId } = useParams<{ sessionId: string }>()
   const location = useLocation()
   const navigate = useNavigate()
+
+  // "最近一场"面试的 id（localStorage 里记录，见 recentInterview.ts）
+  const sessionId = getRecentSessionId()
+  const [notFound, setNotFound] = useState(false)
 
   // 从面试页跳转过来时，可能带了分数（finish 的返回值）
   const initialScore =
@@ -42,10 +46,17 @@ export default function ReviewPage() {
   const [collecting, setCollecting] = useState<number | null>(null)
 
   useEffect(() => {
-    if (!sessionId) return
+    if (!sessionId) {
+      setNotFound(true)
+      setLoading(false)
+      return
+    }
     getReview(sessionId)
       .then(setReview)
-      .catch((e) => toast((e as Error).message, 'error'))
+      .catch(() => {
+        // 会话不存在（可能已被后端 2 小时 TTL 清理），标记空态
+        setNotFound(true)
+      })
       .finally(() => setLoading(false))
 
     // 如果从面试页跳转过来没带分数（比如刷新了页面），补调 finish 拿分数
@@ -93,6 +104,33 @@ export default function ReviewPage() {
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Spinner className="text-primary" />
           <span>加载中…</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (notFound) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="max-w-sm space-y-5 px-6 text-center">
+          <div className="mx-auto flex size-12 items-center justify-center rounded-lg bg-accent">
+            <svg className="size-6 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M9 11l3 3L22 4" />
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+            </svg>
+          </div>
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-foreground">暂无复盘记录</p>
+            <p className="text-sm text-muted-foreground">
+              还没有完成过面试，或最近一场面试已过期。去开始一场新的面试吧。
+            </p>
+          </div>
+          <button
+            onClick={() => navigate('/interview')}
+            className="rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:opacity-90"
+          >
+            开始面试
+          </button>
         </div>
       </div>
     )
