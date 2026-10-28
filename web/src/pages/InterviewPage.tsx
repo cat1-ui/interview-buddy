@@ -46,17 +46,12 @@ export default function InterviewPage() {
     setRestoring(true)
     getSessionInfo(savedId)
       .then((info) => {
-        if (info.finished) {
-          // 已经结束的面试，直接去复盘页，并清掉存储
-          sessionStorage.removeItem(SESSION_KEY)
-          navigate(`/review/${savedId}`)
-          return
-        }
-        // 恢复状态
+        // 恢复状态（含已结束的面试：保留入口，让用户能回看复盘）
         setSessionId(savedId)
         setTopic(info.topic ?? '')
         setQuestionCount(info.question_count)
         setFollowupCount(info.followup_count)
+        setFinished(info.finished)
         setMessages(
           info.history.map((h) => ({
             role: h.role as 'interviewer' | 'candidate',
@@ -77,6 +72,9 @@ export default function InterviewPage() {
       const res = await startInterview(topic.trim() || undefined)
       setSessionId(res.session_id)
       sessionStorage.setItem(SESSION_KEY, res.session_id)
+      // 新面试：清掉上一场的分数缓存，重置结束态
+      sessionStorage.removeItem('interview_last_score')
+      setFinished(false)
       setQuestionCount(1)
       setFollowupCount(0)
       setMessages([{ role: 'interviewer', content: res.question }])
@@ -102,8 +100,8 @@ export default function InterviewPage() {
 
       if (res.finished) {
         setFinished(true)
-        sessionStorage.removeItem(SESSION_KEY)
-        navigate(`/review/${sessionId}`)
+        // 面试结束：保留 session_id，不强制跳转，也不清存储，
+        // 让「面试」页保留"查看本次复盘"入口（用户可自行决定何时去看）。
       }
     } catch (e) {
       toast((e as Error).message, 'error')
@@ -118,8 +116,11 @@ export default function InterviewPage() {
     try {
       const res = await finishInterview(sessionId)
       setFinished(true)
-      sessionStorage.removeItem(SESSION_KEY)
-      navigate(`/review/${sessionId}`, { state: { score: res.score } })
+      // 保留 session_id，不跳转、不清存储，让用户可在本页点"查看本次复盘"
+      if (res.score) {
+        // 把分数暂存到 sessionStorage，复盘页可直接读取，避免再次调 finish
+        sessionStorage.setItem('interview_last_score', JSON.stringify(res.score))
+      }
     } catch (e) {
       toast((e as Error).message, 'error')
     } finally {
@@ -197,6 +198,12 @@ export default function InterviewPage() {
               className="text-xs text-muted-foreground transition-colors hover:text-destructive"
             >
               结束面试
+            </button>
+            <button
+              onClick={() => sessionId && navigate(`/review/${sessionId}`)}
+              className="rounded-md bg-primary px-3.5 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:opacity-90"
+            >
+              查看本次复盘
             </button>
           </div>
           <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-secondary">

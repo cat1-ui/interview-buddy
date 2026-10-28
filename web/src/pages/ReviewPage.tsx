@@ -23,7 +23,16 @@ export default function ReviewPage() {
   const navigate = useNavigate()
 
   // 从面试页跳转过来时，可能带了分数（finish 的返回值）
-  const initialScore = (location.state as { score?: ScoreResult } | null)?.score
+  const initialScore =
+    (location.state as { score?: ScoreResult } | null)?.score ??
+    (() => {
+      try {
+        const raw = sessionStorage.getItem('interview_last_score')
+        return raw ? (JSON.parse(raw) as ScoreResult) : null
+      } catch {
+        return null
+      }
+    })()
 
   const [score, setScore] = useState<ScoreResult | null>(initialScore ?? null)
   const [review, setReview] = useState<ReviewResponse | null>(null)
@@ -58,6 +67,23 @@ export default function ReviewPage() {
       toast((e as Error).message, 'error')
     } finally {
       setCollecting(null)
+    }
+  }
+
+  // 离开复盘：按 C 方案弹确认提示
+  // - 还有未收藏的题：提示"还有 N 题未收藏，确定离开？"
+  // - 已全部收藏：提示"复盘将关闭，确定离开？"
+  function confirmLeave(target: string) {
+    const total = review?.questions.length ?? 0
+    const uncollected = total - collected.size
+    let msg: string
+    if (uncollected > 0) {
+      msg = `还有 ${uncollected} 题未收藏，离开后可能找不回本场面试，确定离开？`
+    } else {
+      msg = '复盘将关闭，确定离开？'
+    }
+    if (window.confirm(msg)) {
+      navigate(target)
     }
   }
 
@@ -189,13 +215,13 @@ export default function ReviewPage() {
         {/* 底部操作 */}
         <div className="flex justify-center gap-3 pb-4">
           <button
-            onClick={() => navigate('/bank')}
+            onClick={() => confirmLeave('/bank')}
             className="rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-white transition-all hover:opacity-90"
           >
             查看题库
           </button>
           <button
-            onClick={() => navigate('/interview')}
+            onClick={() => confirmLeave('/interview')}
             className="rounded-lg border px-6 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-black/[0.03]"
           >
             再来一场
