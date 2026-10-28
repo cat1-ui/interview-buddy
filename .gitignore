@@ -1,0 +1,15 @@
+# 敏感文件，禁止提交
+.env
+data/
+__pycache__/
+*.pyc
+*.db
+.pytest_cache/
+
+# 虚拟环境
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/

@@ -1,0 +1,13 @@
+# 面试搭子 interview-buddy - 依赖清单
+# 后端：FastAPI（接口）+ RAG（检索增强生成）
+
+fastapi>=0.110.0
+uvicorn>=0.29.0
+openai>=1.0.0
+python-dotenv>=1.0.0
+numpy>=1.26.0
+requests>=2.0.0
+pytest>=8.0.0
+python-multipart>=0.0.9
+
+
