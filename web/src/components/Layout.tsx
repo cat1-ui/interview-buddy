@@ -1,6 +1,7 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, Link } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { ToastContainer } from '@/components/ui/toast'
+import BackgroundDecor from '@/components/BackgroundDecor'
 
 const navItems = [
   { to: '/knowledge', label: '知识库问答' },
@@ -12,14 +13,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen flex-col bg-background">
       <header className="relative z-10 flex h-14 shrink-0 items-center justify-between border-b border-border/70 bg-background/70 px-6 backdrop-blur-md">
-        <div className="flex items-center gap-2.5">
+        <Link to="/" className="flex items-center gap-2.5" aria-label="返回首页">
           <span className="flex size-7 items-center justify-center rounded-md bg-primary text-xs font-semibold text-primary-foreground">
             面
           </span>
           <span className="text-[15px] font-medium tracking-tight text-foreground">
-            面试搭子
+            你的专属面试助手
           </span>
-        </div>
+        </Link>
         <nav className="flex items-center gap-0.5">
           {navItems.map((item) => (
             <NavLink
@@ -39,7 +40,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
       </header>
-      <main className="app-backdrop flex-1 overflow-hidden">{children}</main>
+      <main className="app-backdrop relative flex-1 overflow-hidden">
+        <BackgroundDecor />
+        {children}
+      </main>
       <ToastContainer />
     </div>
   )
