@@ -197,6 +197,9 @@ class InterviewService:
         """新建一场面试，返回 session_id。topic 为面试方向（可选）。"""
         import uuid
         self._cleanup_expired()  # 顺便清理过期的旧会话
+        # 开新面试，清空上一场的 TTS 缓存（语音缓存随"当前这场"走）
+        from src import tts
+        tts.tts_cache.clear()
         session_id = str(uuid.uuid4())
         session = InterviewSession()
         session.topic = topic

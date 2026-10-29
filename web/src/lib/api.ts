@@ -275,6 +275,20 @@ export function getSessionInfo(sessionId: string) {
   return request<SessionInfo>(`/interview/${sessionId}`)
 }
 
+// 语音合成：把一段文字转成音频 Blob（供 <audio> 播放）。
+// 走 fetch 直接拿二进制，不用上面的 JSON request。
+export async function synthesizeSpeech(text: string): Promise<Blob> {
+  const res = await fetch(`${BASE}/interview/tts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  })
+  if (!res.ok) {
+    throw new Error('播放失败，请稍后再试')
+  }
+  return res.blob()
+}
+
 // ============ 知识库问答 ============
 
 export function askKnowledge(question: string) {

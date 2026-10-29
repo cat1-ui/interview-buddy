@@ -6,6 +6,7 @@ import {
   answerInterview,
   finishInterview,
   getSessionInfo,
+  synthesizeSpeech,
 } from '@/lib/api'
 import { setRecentSessionId } from '@/lib/recentInterview'
 import { toast } from '@/components/ui/toast'
@@ -33,11 +34,28 @@ export default function InterviewPage() {
   const [finished, setFinished] = useState(false)
   const [restoring, setRestoring] = useState(false)
 
+  // 语音播放相关状态
+  const [speakingIndex, setSpeakingIndex] = useState<number | null>(null) // 正在合成/播放的消息下标
+  const [playingIndex, setPlayingIndex] = useState<number | null>(null) // 正在播放中的消息下标
+  const [paused, setPaused] = useState(false) // 当前语音是否被暂停
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
   }, [messages, loading])
+
+  // 组件卸载时停止语音播放，释放资源
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current.src = ''
+        audioRef.current = null
+      }
+    }
+  }, [])
 
   // 页面加载时：尝试从 sessionStorage 恢复面试
   useEffect(() => {
@@ -141,6 +159,63 @@ export default function InterviewPage() {
     setTopic('')
     sessionStorage.removeItem(SESSION_KEY)
     sessionStorage.removeItem('interview_last_score')
+    // 停止并清理语音
+    stopSpeech()
+  }
+
+  // 停止当前语音播放（并释放音频资源）
+  function stopSpeech() {
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.src = ''
+      audioRef.current = null
+    }
+    setSpeakingIndex(null)
+    setPlayingIndex(null)
+    setPaused(false)
+  }
+
+  // 播放某条面试官消息的语音：点击才合成，合成完自动播放
+  async function handleSpeak(index: number) {
+    const msg = messages[index]
+    if (!msg || msg.role !== 'interviewer') return
+
+    // 如果点的是正在播放/已暂停的那条 -> 切换 暂停/继续
+    if (playingIndex === index && audioRef.current) {
+      if (audioRef.current.paused) {
+        await audioRef.current.play()
+        setPaused(false)
+      } else {
+        audioRef.current.pause()
+        setPaused(true)
+      }
+      return
+    }
+
+    // 正在合成或播放别的，先停掉旧的
+    stopSpeech()
+
+    setSpeakingIndex(index)
+    try {
+      const blob = await synthesizeSpeech(msg.content)
+      const url = URL.createObjectURL(blob)
+      const audio = new Audio(url)
+      audio.onended = () => {
+        setPlayingIndex(null)
+        setPaused(false)
+        URL.revokeObjectURL(url)
+      }
+      audioRef.current = audio
+      setSpeakingIndex(null)
+      setPlayingIndex(index)
+      setPaused(false)
+      await audio.play()
+    } catch {
+      toast('播放失败，请稍后再试', 'error')
+      setSpeakingIndex(null)
+      setPlayingIndex(null)
+      setPaused(false)
+    }
   }
 
   // 恢复中：显示加载
@@ -248,15 +323,65 @@ export default function InterviewPage() {
                 >
                   {msg.role === 'candidate' ? '我' : '面'}
                 </div>
-                <div
-                  className={cn(
-                    'whitespace-pre-wrap rounded-lg px-4 py-2.5 text-sm leading-relaxed',
-                    msg.role === 'candidate'
-                      ? 'rounded-tr-sm bg-primary text-primary-foreground'
-                      : 'rounded-tl-sm border border-border bg-card text-foreground',
+                <div className="flex flex-col gap-1.5">
+                  <div
+                    className={cn(
+                      'whitespace-pre-wrap rounded-lg px-4 py-2.5 text-sm leading-relaxed',
+                      msg.role === 'candidate'
+                        ? 'rounded-tr-sm bg-primary text-primary-foreground'
+                        : 'rounded-tl-sm border border-border bg-card text-foreground',
+                    )}
+                  >
+                    {msg.content}
+                  </div>
+                  {msg.role === 'interviewer' && (
+                    <button
+                      onClick={() => handleSpeak(i)}
+                      disabled={speakingIndex !== null || (playingIndex !== null && playingIndex !== i)}
+                      className={cn(
+                        'flex items-center gap-1.5 self-start rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors',
+                        speakingIndex === i
+                          ? 'opacity-50'
+                          : playingIndex === i
+                            ? 'text-primary'
+                            : 'hover:bg-secondary hover:text-foreground',
+                        (speakingIndex !== null && speakingIndex !== i) || (playingIndex !== null && playingIndex !== i)
+                          ? 'cursor-not-allowed opacity-40'
+                          : '',
+                      )}
+                    >
+                      {speakingIndex === i ? (
+                        <>
+                          <Spinner className="text-primary" />
+                          <span>合成中…</span>
+                        </>
+                      ) : playingIndex === i ? (
+                        paused ? (
+                          <>
+                            <svg className="size-3.5" viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M8 5.14v13.72a1 1 0 0 0 1.5.86l11-6.86a1 1 0 0 0 0-1.72l-11-6.86a1 1 0 0 0-1.5.86z" />
+                            </svg>
+                            <span>继续</span>
+                          </>
+                        ) : (
+                          <>
+                            <svg className="size-3.5" viewBox="0 0 24 24" fill="currentColor">
+                              <rect x="6" y="5" width="4" height="14" rx="1" />
+                              <rect x="14" y="5" width="4" height="14" rx="1" />
+                            </svg>
+                            <span>暂停</span>
+                          </>
+                        )
+                      ) : (
+                        <>
+                          <svg className="size-3.5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M8 5.14v13.72a1 1 0 0 0 1.5.86l11-6.86a1 1 0 0 0 0-1.72l-11-6.86a1 1 0 0 0-1.5.86z" />
+                          </svg>
+                          <span>播放</span>
+                        </>
+                      )}
+                    </button>
                   )}
-                >
-                  {msg.content}
                 </div>
               </div>
             </div>

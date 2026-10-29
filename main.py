@@ -18,13 +18,14 @@ import os
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 
 from src.config import CORS_ORIGINS, DEEPSEEK_API_KEY, ZHIPU_API_KEY, DOCS_DIR
 from src.document_loader import build_chunks
 from src import embedding
 from src import bank
+from src import tts
 from src.vector_store import VectorStore
 from src.rag import RagService
 from src.interview import InterviewService
@@ -220,6 +221,42 @@ def interview_review(session_id: str):
     复盘：返回整场面试的按题分组记录（题目 + 完整一问一答），供前端做复盘表。
     """
     return interview_service.get_review(session_id)
+
+
+class TtsRequest(BaseModel):
+    text: str
+
+
+@app.post("/interview/tts")
+async def interview_tts(req: TtsRequest):
+    """
+    把一段面试官回复文字合成成语音（MP3）。
+
+    设计：
+        - 前端点击播放按钮时才调用（不预合成），省去无谓合成
+        - 带内存缓存：同一段文字反复点播放只合成一次
+        - 音频全程在内存中，不落盘，播完即弃
+    返回 audio/mpeg 二进制；失败返回 502（前端提示"播放失败，请稍后再试"）。
+    """
+    text = (req.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="文本为空")
+
+    # 命中缓存，直接返回
+    cached = tts.tts_cache.get(text)
+    if cached is not None:
+        return Response(content=cached, media_type="audio/mpeg")
+
+    try:
+        audio = await tts.synthesize(text)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"语音合成失败：{exc}")
+
+    if not audio:
+        raise HTTPException(status_code=502, detail="语音合成失败：返回空音频")
+
+    tts.tts_cache.set(text, audio)
+    return Response(content=audio, media_type="audio/mpeg")
 
 
 # ============ 题库相关接口 ============
