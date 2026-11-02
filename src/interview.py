@@ -84,9 +84,12 @@ SCORE_PROMPT = """你是一位技术面试官，面试已经结束。以下是�
 面试记录：
 {history}
 
+供参考的相关知识点（面试官出题时依据的内容，请对照它判断候选人回答的准确性）：
+{knowledge_points}
+
 请严格按照以下要求打分，只从这三个维度，不要增加其他维度：
 
-1. 准确性：回答是否正确、有无明显错误
+1. 准确性：回答是否正确、有无明显错误（对照上面的相关知识点判断）
 2. 深度：是否讲到了原理、底层，还是停留在表面
 3. 表达清晰度：逻辑是否清晰、有条理
 
@@ -101,7 +104,7 @@ SCORE_PROMPT = """你是一位技术面试官，面试已经结束。以下是�
   "准确性": 整数,
   "深度": 整数,
   "表达清晰度": 整数,
-  "总评": "一段话的总体评价和改进建议"
+  "总评": "一段总体评价，然后针对准确性、深度、表达清晰度三个维度各给一条具体、可操作的改进建议（例如：深度——多解释底层原理，而不是只背定义）"
 }}
 """
 
@@ -111,10 +114,13 @@ SHORT_SCORE_PROMPT = """你是一位技术面试官。候选人在面试中途�
 面试记录：
 {history}
 
+供参考的相关知识点（面试官出题时依据的内容，请对照它判断候选人回答的准确性）：
+{knowledge_points}
+
 请基于候选人已经回答的内容，给一个简短的评分。
 
 请严格按照以下要求，只从三个维度打分，不要增加其他维度：
-1. 准确性：回答是否正确
+1. 准确性：回答是否正确（对照上面的相关知识点判断）
 2. 深度：是否讲到了原理
 3. 表达清晰度：逻辑是否清晰
 
@@ -129,7 +135,7 @@ SHORT_SCORE_PROMPT = """你是一位技术面试官。候选人在面试中途�
   "准确性": 整数,
   "深度": 整数,
   "表达清晰度": 整数,
-  "总评": "一段话的简短评价，并说明这是不完整面试的评分"
+  "总评": "一段简短评价，然后针对准确性、深度、表达清晰度三个维度各给一条具体、可操作的改进建议，并说明这是不完整面试的评分"
 }}
 """
 
@@ -224,35 +230,37 @@ class InterviewService:
                     embed_fn = embedding.embed_text
                 topic_vector = embed_fn(session.topic)
                 related = self.vector_store.search(topic_vector, top_k=3)
-                if related:
-                    context_lines = [f"【知识点片段】{r['content']}" for r in related]
-                    return (
-                        f"面试方向是「{session.topic}」，请严格围绕这个方向出题。"
-                        "以下是知识库里与该方向最相关的内容，请基于这些内容出题：\n"
-                        + "\n\n".join(context_lines)
-                    )
-                else:
-                    return f"面试方向是「{session.topic}」，请围绕这个方向出题（知识库中没有相关内容，请用你的通用知识）。"
             except Exception:
-                # 检索失败，退化为"只用方向词出题"
-                return f"面试方向是「{session.topic}」，请围绕这个方向出题。"
+                related = []
+            if related:
+                context_lines = [f"【知识点片段】{r['content']}" for r in related]
+                points_text = "\n\n".join(context_lines)
+                return (
+                    f"面试方向是「{session.topic}」，请严格围绕这个方向出题。"
+                    "以下是知识库里与该方向最相关的内容，请基于这些内容出题：\n"
+                    + points_text
+                ), points_text
+            # 选了方向但检索不到相关内容：退化为随机取知识库出题（不出通用题）
 
-        # 没指定方向：随机取知识库内容
+        # 没指定方向（或方向检索不到）：随机取知识库内容出题
         samples = self.vector_store.random_sample(3)
         if samples:
             context_lines = [f"【知识点片段】{s['content']}" for s in samples]
+            points_text = "\n\n".join(context_lines)
             return (
                 "以下是候选人知识库里的一些内容，请围绕这些内容出题（考察候选人对这些知识的掌握）：\n"
-                + "\n\n".join(context_lines)
-            )
-        return ""
+                + points_text
+            ), points_text
+        return "", ""
 
     def _generate_question(self, session):
         """
         出一道题：构造素材 → 调模型 → 更新计数器与历史。
         返回题目文本。
         """
-        extra_context = self._build_question_context(session)
+        if self.vector_store.count == 0:
+            raise HTTPException(status_code=400, detail="知识库为空，请先上传资料再开始面试")
+        extra_context, points_text = self._build_question_context(session)
         prompt = GENERATE_QUESTION_PROMPT.format(extra_context=extra_context)
         try:
             response = self.client.chat.completions.create(
@@ -276,6 +284,7 @@ class InterviewService:
         session.questions.append({
             "question": question,
             "dialogue": [{"role": "interviewer", "content": question}],
+            "context": points_text,
         })
 
         return question
@@ -362,7 +371,9 @@ class InterviewService:
         注意：计数器更新、历史记录这些"确定性"操作在 yield 之前就完成，
         保证 meta 里的 question_count 是正确的。
         """
-        extra_context = self._build_question_context(session)
+        if self.vector_store.count == 0:
+            raise HTTPException(status_code=400, detail="知识库为空，请先上传资料再开始面试")
+        extra_context, points_text = self._build_question_context(session)
         prompt = GENERATE_QUESTION_PROMPT.format(extra_context=extra_context)
         try:
             stream = self.client.chat.completions.create(
@@ -392,6 +403,7 @@ class InterviewService:
         session.questions.append({
             "question": question,
             "dialogue": [{"role": "interviewer", "content": question}],
+            "context": points_text,
         })
 
     def _append(self, session, role, content):
@@ -655,12 +667,19 @@ class InterviewService:
             for h in session.history
         )
 
+        # 拼出"每题对应的知识点"，供打分时对照判断准确性
+        knowledge_text = "\n\n".join(
+            f"题目：{q['question']}\n相关知识：{q.get('context', '')}"
+            for q in session.questions
+            if q.get('context')
+        ) or "（无）"
+
         # 判断是否"提前结束"：没答满 5 题就结束的，视为不完整面试
         is_incomplete = not session.completed
 
         # 选择对应的打分 prompt
         score_prompt = SHORT_SCORE_PROMPT if is_incomplete else SCORE_PROMPT
-        prompt = score_prompt.format(history=history_text)
+        prompt = score_prompt.format(history=history_text, knowledge_points=knowledge_text)
         try:
             response = self.client.chat.completions.create(
                 model=DEEPSEEK_MODEL,

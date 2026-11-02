@@ -68,10 +68,19 @@ class _FakeRag:
 def _make_service():
     client = FakeClient()
     vs = VectorStore()
+    vs.add(
+        texts=["RAG 是检索增强生成", "Agent 可自主调用工具", "Prompt 工程优化提示词"],
+        metadatas=[
+            {"filename": "kb.md"},
+            {"filename": "kb.md"},
+            {"filename": "kb.md"},
+        ],
+        vectors=[[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+    )
     svc = InterviewService(
         _FakeRag(vs),
         client=client,
-        embed_fn=lambda text: [1.0, 0.0],  # fake embedding，不触网
+        embed_fn=lambda text: [1.0, 0.0, 0.0],  # fake embedding，不触网
     )
     return svc, client
 
@@ -181,3 +190,24 @@ def test_collect_question_uses_stable_source_key(monkeypatch):
     assert qid == 42
     # 默认收藏当前题，source_key 用当前题序号，供题库去重
     assert calls == [f"{sid}:1"]
+
+
+def test_question_generation_requires_knowledge_base():
+    from fastapi import HTTPException
+
+    client = FakeClient()
+    vs = VectorStore()  # 知识库为空
+    svc = InterviewService(
+        _FakeRag(vs),
+        client=client,
+        embed_fn=lambda text: [1.0, 0.0, 0.0],
+    )
+    sid = svc.new_session()
+
+    try:
+        svc.start_question(sid)
+    except HTTPException as exc:
+        assert exc.status_code == 400
+        assert "知识库为空" in exc.detail
+    else:
+        raise AssertionError("空库时应抛出 400 错误")
