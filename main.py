@@ -15,6 +15,7 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 import os
+import threading
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,13 +34,18 @@ from src.interview import InterviewService
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用生命周期：启动时校验 API key，关闭时可做清理。"""
+    """应用生命周期：启动时校验 API key，并自动构建知识库。"""
     import logging
     logger = logging.getLogger("uvicorn.error")
     if not DEEPSEEK_API_KEY:
         logger.warning("警告：未配置 DEEPSEEK_API_KEY，问答/面试将无法工作，请在 .env 中填入")
     if not ZHIPU_API_KEY:
         logger.warning("警告：未配置 ZHIPU_API_KEY，构建知识库将无法工作，请在 .env 中填入")
+
+    # 向量库存在内存里，每次重启都是空的。
+    # 这里在后台线程里自动重建一次，避免阻塞服务启动（向量化要多次网络请求）。
+    threading.Thread(target=_auto_build_on_startup, daemon=True).start()
+
     yield
     # 这里可以写"服务关闭时要做的事"（暂时用不到）
 
@@ -347,6 +353,41 @@ def _rebuild_knowledge_base():
     vector_store.clear()
     vector_store.add(texts, metadatas, vectors)
     return vector_store.count
+
+
+def _auto_build_on_startup():
+    """
+    服务启动时自动构建知识库。
+
+    为什么需要：向量库存在内存里，每次重启服务都会清空。
+    以前靠前端「重新构建」按钮手动重建，容易误点、也容易被遗忘，
+    现在改成启动时自动做一次，用户无需关心"索引"这回事。
+
+    在后台线程执行，不阻塞服务启动；失败只记日志，不影响其他功能。
+    """
+    import logging
+    logger = logging.getLogger("uvicorn.error")
+    try:
+        if vector_store.count > 0:
+            return
+        # data/docs 里没有资料就不必构建
+        if not DOCS_DIR.exists():
+            return
+        has_docs = any(
+            f.is_file() and f.name.endswith((".md", ".txt"))
+            for f in DOCS_DIR.iterdir()
+        )
+        if not has_docs:
+            return
+        if not ZHIPU_API_KEY:
+            logger.warning("检测到资料但未配置 ZHIPU_API_KEY，跳过自动构建知识库")
+            return
+
+        logger.info("正在自动构建知识库…")
+        count = _rebuild_knowledge_base()
+        logger.info(f"知识库自动构建完成：{count} 个片段")
+    except Exception as exc:
+        logger.warning(f"知识库自动构建失败：{exc}（上传资料时会自动重试）")
 
 
 @app.post("/upload")

@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import {
   askKnowledge,
-  buildKnowledge,
   uploadDocs,
   listDocs,
   deleteDoc,
@@ -25,7 +24,6 @@ export default function KnowledgePage() {
   const [chats, setChats] = useState<ChatItem[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const [building, setBuilding] = useState(false)
   const [chunkCount, setChunkCount] = useState<number | null>(null)
   const [docs, setDocs] = useState<DocItem[]>([])
   const [uploading, setUploading] = useState(false)
@@ -52,21 +50,6 @@ export default function KnowledgePage() {
       setDocs(await listDocs())
     } catch {
       // 忽略
-    }
-  }
-
-  async function handleBuild() {
-    setBuilding(true)
-    try {
-      const res = await buildKnowledge()
-      setChunkCount(res.chunk_count)
-      if (res.status === 'empty') {
-        toast('知识库里还没有资料，请先上传 md/txt 文件', 'info')
-      }
-    } catch (e) {
-      toast((e as Error).message, 'error')
-    } finally {
-      setBuilding(false)
     }
   }
 
@@ -209,13 +192,6 @@ export default function KnowledgePage() {
             >
               资料（{docs.length}）
             </button>
-            <button
-              onClick={handleBuild}
-              disabled={building}
-              className="rounded-lg bg-primary px-3.5 py-1.5 text-sm font-medium text-white transition-all disabled:opacity-50"
-            >
-              {building ? '构建中…' : '重新构建'}
-            </button>
           </div>
         </div>
 
@@ -264,7 +240,7 @@ export default function KnowledgePage() {
               </div>
               <h2 className="text-lg font-semibold tracking-tight">向知识库提问</h2>
               <p className="text-sm leading-relaxed text-muted-foreground">
-                先往 data/docs 放资料，再点「重新构建知识库」，就能基于你自己的资料问答了。
+                先上传 .md 或 .txt 资料，就能基于你自己的资料问答了。
               </p>
             </div>
           </div>
