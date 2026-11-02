@@ -1,0 +1,4 @@
+# 面试搭子 interview-buddy - 开发期依赖（测试用）
+# 安装：pip install -r requirements-dev.txt
+
+pytest>=8.0.0

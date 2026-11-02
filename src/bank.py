@@ -21,10 +21,21 @@ from src.config import DATA_DIR
 DB_PATH = DATA_DIR / "interview_bank.db"
 
 
-def _connect():
-    """建立数据库连接（自动建目录、建表）。"""
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH))
+def _connect(db_path=None):
+    """建立数据库连接（自动建目录、建表）。
+
+    db_path: 可选，指定数据库文件路径（测试可传 tmp_path 隔离）。
+             为 None 时用默认的 DB_PATH。
+    """
+    if db_path is None:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        path = DB_PATH
+    else:
+        path = Path(db_path)
+        # :memory: 没有父目录，跳过 mkdir
+        if str(db_path) != ":memory:":
+            path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(path))
     conn.row_factory = sqlite3.Row  # 让查询结果能按列名取值
     return conn
 
@@ -51,7 +62,7 @@ def _init_table(conn):
     conn.commit()
 
 
-def add_question(question, dialogue, category="", topic="", source_key=""):
+def add_question(question, dialogue, category="", topic="", source_key="", db_path=None):
     """
     收藏一道题。
     question: 题目文本
@@ -59,6 +70,7 @@ def add_question(question, dialogue, category="", topic="", source_key=""):
     category: 分类标签（默认同 topic）
     topic: 面试方向
     source_key: 来源标识（session_id:index），用于去重。相同 source_key 不会重复入库。
+    db_path: 可选，指定数据库文件路径（测试用）。
     返回 (qid, created)：
         qid: 记录 id（若已存在，返回已有记录的 id）
         created: 是否真的新插入（False 表示已存在、本次被去重跳过）
@@ -66,7 +78,7 @@ def add_question(question, dialogue, category="", topic="", source_key=""):
     if not category:
         category = topic  # 默认用面试方向当分类
 
-    conn = _connect()
+    conn = _connect(db_path)
     try:
         _init_table(conn)
 
@@ -96,13 +108,14 @@ def add_question(question, dialogue, category="", topic="", source_key=""):
         conn.close()
 
 
-def list_questions(category=None):
+def list_questions(category=None, db_path=None):
     """
     列出题库（按收藏时间倒序）。
     category: 可选，只返回该分类下的题。
+    db_path: 可选，指定数据库文件路径（测试用）。
     返回 list of dict。
     """
-    conn = _connect()
+    conn = _connect(db_path)
     try:
         _init_table(conn)
         if category:
@@ -129,11 +142,12 @@ def list_questions(category=None):
         conn.close()
 
 
-def delete_question(qid):
+def delete_question(qid, db_path=None):
     """
     删除一道题。返回是否真的删掉了（True/False）。
+    db_path: 可选，指定数据库文件路径（测试用）。
     """
-    conn = _connect()
+    conn = _connect(db_path)
     try:
         _init_table(conn)
         cur = conn.execute("DELETE FROM questions WHERE id = ?", (qid,))
@@ -143,11 +157,12 @@ def delete_question(qid):
         conn.close()
 
 
-def update_category(qid, category):
+def update_category(qid, category, db_path=None):
     """
     修改一道题的分类。返回是否真的改到了（True/False）。
+    db_path: 可选，指定数据库文件路径（测试用）。
     """
-    conn = _connect()
+    conn = _connect(db_path)
     try:
         _init_table(conn)
         cur = conn.execute(
@@ -160,11 +175,12 @@ def update_category(qid, category):
         conn.close()
 
 
-def list_categories():
+def list_categories(db_path=None):
     """
     列出所有分类（去重）。
+    db_path: 可选，指定数据库文件路径（测试用）。
     """
-    conn = _connect()
+    conn = _connect(db_path)
     try:
         _init_table(conn)
         rows = conn.execute(

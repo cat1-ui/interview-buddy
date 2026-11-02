@@ -33,9 +33,10 @@ RAG_PROMPT = """请根据以下资料回答用户的问题。
 
 
 class RagService:
-    def __init__(self, vector_store: VectorStore):
+    def __init__(self, vector_store: VectorStore, client=None):
         self.vector_store = vector_store
-        self.client = OpenAI(
+        # client 可注入（测试传 fake）；未注入时才真正创建 OpenAI 客户端
+        self.client = client or OpenAI(
             api_key=DEEPSEEK_API_KEY,
             base_url=DEEPSEEK_BASE_URL,
             timeout=60.0,  # 请求超时，防止上游挂起导致请求卡死

@@ -73,10 +73,11 @@ class VectorStore:
         # 取相似度最高的 top_k 个下标
         top_indices = np.argsort(similarities)[::-1][:top_k]
 
-        # 记录 top1 分数，用于以后观察"相关问题 vs 不相关问题"的分数分布，
+        # 记录 top-K 分数，用于以后观察"相关问题 vs 不相关问题"的分数分布，
         # 以便合理设定检索阈值（SIMILARITY_THRESHOLD）。
         if len(top_indices) > 0:
-            logger.info(f"[检索] top1 相似度 = {float(similarities[top_indices[0]]):.4f}")
+            scores = [round(float(similarities[i]), 4) for i in top_indices]
+            logger.info(f"[检索] top-{len(scores)} 相似度 = {scores}")
 
         results = []
         for idx in top_indices:

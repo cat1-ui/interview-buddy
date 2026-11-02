@@ -45,7 +45,7 @@ CHUNK_SIZE = 500
 # 相邻段重叠字符数（防止一句话被切断导致信息丢失）
 CHUNK_OVERLAP = 50
 # 检索时返回最相关的几段
-TOP_K = 3
+TOP_K = 4
 # embedding 批量请求时，每批最多多少段
 EMBED_BATCH_SIZE = 32
 # 检索相似度阈值：top1 分数低于此值的，视为"没有相关资料"。

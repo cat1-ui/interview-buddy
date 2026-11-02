@@ -35,7 +35,7 @@ INTERVIEWER_SYSTEM = """你是一位严谨但友好的技术面试官，正在�
 3. 过渡：回答得不错，就自然进入下一题
 
 出题要求：
-- 题目要具体、有深度，不要问太宽泛或太简单的问题
+- 题目要具体、有深度，不要问太宽泛
 - 优先问候选人简历/项目相关的技术点（如果提供了相关资料）
 
 追问要求：
@@ -166,14 +166,17 @@ SESSION_TTL = 2 * 60 * 60  # 会话过期时间（秒）：2 小时无活动视�
 
 
 class InterviewService:
-    def __init__(self, rag_service: RagService):
-        self.client = OpenAI(
+    def __init__(self, rag_service: RagService, client=None, embed_fn=None):
+        # client 可注入（测试传 fake）；未注入时才真正创建 OpenAI 客户端
+        self.client = client or OpenAI(
             api_key=DEEPSEEK_API_KEY,
             base_url=DEEPSEEK_BASE_URL,
             timeout=60.0,  # 请求超时，防止上游挂起导致请求卡死
         )
         self.rag_service = rag_service
         self.vector_store = rag_service.vector_store  # 拿到向量库，用于随机取知识点
+        # embed_fn 可注入（测试传 fake）；未注入时默认用 embedding.embed_text
+        self.embed_fn = embed_fn
         self.sessions = {}  # session_id -> InterviewSession
 
     def _cleanup_expired(self):
@@ -215,8 +218,11 @@ class InterviewService:
         if session.topic:
             # 指定了方向：用方向去检索知识库，取最相关的内容
             try:
-                from src import embedding
-                topic_vector = embedding.embed_text(session.topic)
+                embed_fn = self.embed_fn
+                if embed_fn is None:
+                    from src import embedding
+                    embed_fn = embedding.embed_text
+                topic_vector = embed_fn(session.topic)
                 related = self.vector_store.search(topic_vector, top_k=3)
                 if related:
                     context_lines = [f"【知识点片段】{r['content']}" for r in related]
