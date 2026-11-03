@@ -16,6 +16,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 import os
 import threading
+import asyncio
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,7 +24,7 @@ from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 
 from src.config import CORS_ORIGINS, DEEPSEEK_API_KEY, ZHIPU_API_KEY, DOCS_DIR
-from src.document_loader import build_chunks
+from src.document_loader import build_chunks, split_text
 from src import embedding
 from src import bank
 from src import tts
@@ -341,18 +342,22 @@ ALLOWED_SUFFIXES = (".md", ".txt")  # 只允许这两个后缀（严格小写）
 
 
 def _rebuild_knowledge_base():
-    """重新构建知识库（读 data/docs → 切分 → 向量化 → 存入内存）。"""
+    """全量重建知识库（读 data/docs → 切分 → 向量化 → 存入内存）。"""
     global vector_store
-    chunks = build_chunks()
-    if not chunks:
+    vector_store.building = True
+    try:
+        chunks = build_chunks()
+        if not chunks:
+            vector_store.clear()
+            return 0
+        texts = [c["content"] for c in chunks]
+        metadatas = [{"filename": c["filename"]} for c in chunks]
+        vectors = embedding.embed_texts(texts)
         vector_store.clear()
-        return 0
-    texts = [c["content"] for c in chunks]
-    metadatas = [{"filename": c["filename"]} for c in chunks]
-    vectors = embedding.embed_texts(texts)
-    vector_store.clear()
-    vector_store.add(texts, metadatas, vectors)
-    return vector_store.count
+        vector_store.add(texts, metadatas, vectors)
+        return vector_store.count
+    finally:
+        vector_store.building = False
 
 
 def _auto_build_on_startup():
@@ -428,15 +433,23 @@ async def upload_docs(files: list[UploadFile] = File(...)):
                 await f.close()
                 raise HTTPException(status_code=413, detail=f"文件 {filename} 超过 5MB 限制")
             chunks_bytes.append(chunk)
-
-        dest.write_bytes(b"".join(chunks_bytes))
         await f.close()
+        content = b"".join(chunks_bytes)
+
+        # 切分 + 向量化（只处理这一个文件，增量索引；放入线程池避免阻塞事件循环）
+        text = content.decode("utf-8", errors="ignore")
+        chunks = split_text(text)
+        if not chunks:
+            raise HTTPException(status_code=400, detail=f"文件 {filename} 内容为空")
+        # 先 embed 成功才落盘：失败则抛异常、文件未写入，可重传，
+        # 避免"文件已落盘但索引没建成"的半残状态（重传会撞 409）。
+        vectors = await asyncio.to_thread(embedding.embed_texts, chunks)
+
+        dest.write_bytes(content)
+        vector_store.add(chunks, [{"filename": filename}] * len(chunks), vectors)
         saved.append(filename)
 
-    # 3. 自动重新构建
-    chunk_count = _rebuild_knowledge_base()
-
-    return {"status": "success", "saved": saved, "chunk_count": chunk_count}
+    return {"status": "success", "saved": saved, "chunk_count": vector_store.count}
 
 
 @app.get("/files")
@@ -473,6 +486,6 @@ def delete_doc(filename: str):
         raise HTTPException(status_code=404, detail="文件不存在")
 
     dest.unlink()  # 删除文件
-    chunk_count = _rebuild_knowledge_base()
+    vector_store.remove_by_filename(filename)  # 增量：只移除对应向量，不全量重建
 
-    return {"status": "deleted", "filename": filename, "chunk_count": chunk_count}
+    return {"status": "deleted", "filename": filename, "chunk_count": vector_store.count}

@@ -26,6 +26,7 @@ class VectorStore:
         self.texts = []        # 存所有 chunk 的文本
         self.metadatas = []    # 存每个 chunk 的来源信息（文件名等）
         self.vectors = None    # 存所有向量，是一个二维 numpy 数组
+        self.building = False  # 是否正在全量重建索引（构建中禁止出题）
 
     def add(self, texts, metadatas, vectors):
         """批量添加文本、元数据、向量"""
@@ -105,3 +106,20 @@ class VectorStore:
             }
             for i in indices
         ]
+
+    def remove_by_filename(self, filename):
+        """
+        按文件名移除对应的所有 chunk（增量删除用）。
+        返回移除的数量；未找到同名 chunk 则返回 0 且不改动数据。
+        """
+        if not self.texts:
+            return 0
+        keep = [i for i, m in enumerate(self.metadatas) if m.get("filename") != filename]
+        removed = len(self.texts) - len(keep)
+        if removed == 0:
+            return 0
+        self.texts = [self.texts[i] for i in keep]
+        self.metadatas = [self.metadatas[i] for i in keep]
+        if self.vectors is not None:
+            self.vectors = self.vectors[keep] if keep else None
+        return removed

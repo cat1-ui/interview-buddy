@@ -283,6 +283,8 @@ class InterviewService:
         返回题目文本。
         """
         if self.vector_store.count == 0:
+            if getattr(self.vector_store, "building", False):
+                raise HTTPException(status_code=503, detail="知识库正在构建中，请稍候再试")
             raise HTTPException(status_code=400, detail="知识库为空，请先上传资料再开始面试")
         extra_context, points_text = self._build_question_context(session)
         prompt = GENERATE_QUESTION_PROMPT.format(extra_context=extra_context)
@@ -443,6 +445,8 @@ class InterviewService:
         保证 meta 里的 question_count 是正确的。
         """
         if self.vector_store.count == 0:
+            if getattr(self.vector_store, "building", False):
+                raise HTTPException(status_code=503, detail="知识库正在构建中，请稍候再试")
             raise HTTPException(status_code=400, detail="知识库为空，请先上传资料再开始面试")
         extra_context, points_text = self._build_question_context(session)
         prompt = GENERATE_QUESTION_PROMPT.format(extra_context=extra_context)
