@@ -1,0 +1,317 @@
+{
+  "metrics": [
+    {
+      "recall@1": 0.8,
+      "recall@2": 1.0,
+      "recall@4": 1.0,
+      "recall@6": 1.0,
+      "mrr@6": 0.9,
+      "miss": 0,
+      "chunk_size": 300,
+      "overlap": 30,
+      "chunk_count": 318
+    },
+    {
+      "recall@1": 1.0,
+      "recall@2": 1.0,
+      "recall@4": 1.0,
+      "recall@6": 1.0,
+      "mrr@6": 1.0,
+      "miss": 0,
+      "chunk_size": 500,
+      "overlap": 50,
+      "chunk_count": 192
+    },
+    {
+      "recall@1": 0.7,
+      "recall@2": 0.8,
+      "recall@4": 0.9,
+      "recall@6": 1.0,
+      "mrr@6": 0.795,
+      "miss": 0,
+      "chunk_size": 800,
+      "overlap": 80,
+      "chunk_count": 120
+    }
+  ],
+  "details": {
+    "300": [
+      {
+        "id": 101,
+        "question": "Agent 编排器的核心架构用的是什么模式？需要支持哪几种执行方式？",
+        "rank": 1,
+        "gold_chunks": [
+          8
+        ],
+        "top1_preview": "l@20）从 65% 提升到 93%。\n- 精确编号类查询的命中率从 30% 提升到 98%。\n\n---\n\n### Q3"
+      },
+      {
+        "id": 102,
+        "question": "意图识别为什么要分两个阶段做？第一阶段用的是什么？",
+        "rank": 1,
+        "gold_chunks": [
+          16
+        ],
+        "top1_preview": "**Situation：** 企业客服场景中，用户意图多样（咨询、投诉、查询订单、操作请求等），且存在大量隐含意图和多意"
+      },
+      {
+        "id": 103,
+        "question": "多轮对话的上下文分成哪几层？system prompt 大概占多少 token？",
+        "rank": 2,
+        "gold_chunks": [
+          37
+        ],
+        "top1_preview": "略：**\n   - 维护最近 10 轮对话的完整记录。\n   - 超过 10 轮时，前面的对话自动摘要压缩。\n   - "
+      },
+      {
+        "id": 104,
+        "question": "熔断器的三个状态是什么？半开状态是用来干什么的？",
+        "rank": 2,
+        "gold_chunks": [
+          68
+        ],
+        "top1_preview": "→ HALF_OPEN：熔断 30s 后自动进入半开状态\n   HALF_OPEN → CLOSED：连续 3 次探测成"
+      },
+      {
+        "id": 105,
+        "question": "重排序最终选了哪个模型？为什么不直接用 Cohere 的接口？",
+        "rank": 1,
+        "gold_chunks": [
+          82
+        ],
+        "top1_preview": "和 BM25 分数不够精确。\n\n**Task：** 实现高质量的重排序（Reranking）模块，提升最终检索精度。\n\n"
+      },
+      {
+        "id": 106,
+        "question": "会话摘要压缩的触发阈值是多少？以 8K 上下文为例大概是多少 token？",
+        "rank": 1,
+        "gold_chunks": [
+          90
+        ],
+        "top1_preview": "确定的？\n\n**Situation：** 长对话会导致 context window 超限，需要对历史对话做摘要压缩。但"
+      },
+      {
+        "id": 107,
+        "question": "Milvus 的 HNSW 索引参数具体怎么调的？",
+        "rank": 1,
+        "gold_chunks": [
+          145
+        ],
+        "top1_preview": "避免了同步阻塞导致的内存堆积）。\n\n---\n\n### Q6: 数据库查询是怎么优化的？\n\n**Situation：** "
+      },
+      {
+        "id": 108,
+        "question": "模型超时是怎么分级的？等第一个 token 最多等多久？",
+        "rank": 1,
+        "gold_chunks": [
+          168
+        ],
+        "top1_preview": "时，影响用户体验。\n\n**Task：** 设计模型超时的处理策略，保证用户体验。\n\n**Action：**\n\n1. **"
+      },
+      {
+        "id": 109,
+        "question": "多租户场景下知识库是怎么做数据隔离的？",
+        "rank": 1,
+        "gold_chunks": [
+          55
+        ],
+        "top1_preview": "多个企业客户，每个客户有自己的知识库、配置和数据隔离要求。\n\n**Task：** 设计多租户架构，确保数据隔离、配置独立"
+      },
+      {
+        "id": 110,
+        "question": "安全兜底为什么只识别极端风险信号，不把普通的烦躁也算进去？",
+        "rank": 1,
+        "gold_chunks": [
+          312
+        ],
+        "top1_preview": "tions` 表。\n\n### 8.2 情绪洞察（让数据活起来）\n\n把情绪记录画成图 + 让模型总结：\n- **趋势图**"
+      }
+    ],
+    "500": [
+      {
+        "id": 101,
+        "question": "Agent 编排器的核心架构用的是什么模式？需要支持哪几种执行方式？",
+        "rank": 1,
+        "gold_chunks": [
+          5
+        ],
+        "top1_preview": "Situation：** 系统需要协调多个组件（意图识别、检索、生成、工具调用等）的执行流程，需要一个灵活且可扩展的编排"
+      },
+      {
+        "id": 102,
+        "question": "意图识别为什么要分两个阶段做？第一阶段用的是什么？",
+        "rank": 1,
+        "gold_chunks": [
+          9
+        ],
+        "top1_preview": " 且业务逻辑简单 → 单 Agent。\n   - 工具数 > 8 或需要专业分工 → 多 Agent。\n   - 有跨域"
+      },
+      {
+        "id": 103,
+        "question": "多轮对话的上下文分成哪几层？system prompt 大概占多少 token？",
+        "rank": 1,
+        "gold_chunks": [
+          22
+        ],
+        "top1_preview": "\n---\n\n### Q11: 怎么设计的对话管理和上下文维护？\n\n**Situation：** 企业客服场景中多轮对话非"
+      },
+      {
+        "id": 104,
+        "question": "熔断器的三个状态是什么？半开状态是用来干什么的？",
+        "rank": 1,
+        "gold_chunks": [
+          41
+        ],
+        "top1_preview": "过，记录失败率。\n   - **OPEN（断开/熔断）：** 所有请求直接失败（返回降级响应），不再调用下游。\n   -"
+      },
+      {
+        "id": 105,
+        "question": "重排序最终选了哪个模型？为什么不直接用 Cohere 的接口？",
+        "rank": 1,
+        "gold_chunks": [
+          49
+        ],
+        "top1_preview": "的什么模型？\n\n**Situation：** 多路检索后得到大量候选 chunk（通常 30-60 个），需要精排后选出"
+      },
+      {
+        "id": 106,
+        "question": "会话摘要压缩的触发阈值是多少？以 8K 上下文为例大概是多少 token？",
+        "rank": 1,
+        "gold_chunks": [
+          54
+        ],
+        "top1_preview": "确定的？\n\n**Situation：** 长对话会导致 context window 超限，需要对历史对话做摘要压缩。但"
+      },
+      {
+        "id": 107,
+        "question": "Milvus 的 HNSW 索引参数具体怎么调的？",
+        "rank": 1,
+        "gold_chunks": [
+          87
+        ],
+        "top1_preview": "避免了同步阻塞导致的内存堆积）。\n\n---\n\n### Q6: 数据库查询是怎么优化的？\n\n**Situation：** "
+      },
+      {
+        "id": 108,
+        "question": "模型超时是怎么分级的？等第一个 token 最多等多久？",
+        "rank": 1,
+        "gold_chunks": [
+          100,
+          101
+        ],
+        "top1_preview": "P 连接建立）。\n   - **首 token 超时：** 10s（等待第一个 token 返回）。\n   - **总超"
+      },
+      {
+        "id": 109,
+        "question": "多租户场景下知识库是怎么做数据隔离的？",
+        "rank": 1,
+        "gold_chunks": [
+          33
+        ],
+        "top1_preview": "多个企业客户，每个客户有自己的知识库、配置和数据隔离要求。\n\n**Task：** 设计多租户架构，确保数据隔离、配置独立"
+      },
+      {
+        "id": 110,
+        "question": "安全兜底为什么只识别极端风险信号，不把普通的烦躁也算进去？",
+        "rank": 1,
+        "gold_chunks": [
+          188
+        ],
+        "top1_preview": "1），按天聚合画折线\n- **饼图**：四种情绪各占多少\n- **文字洞察**：让模型说一句\"你最近焦虑有点多，是不是压"
+      }
+    ],
+    "800": [
+      {
+        "id": 101,
+        "question": "Agent 编排器的核心架构用的是什么模式？需要支持哪几种执行方式？",
+        "rank": 1,
+        "gold_chunks": [
+          3
+        ],
+        "top1_preview": "l@20）从 65% 提升到 93%。\n- 精确编号类查询的命中率从 30% 提升到 98%。\n\n---\n\n### Q3"
+      },
+      {
+        "id": 102,
+        "question": "意图识别为什么要分两个阶段做？第一阶段用的是什么？",
+        "rank": 1,
+        "gold_chunks": [
+          6
+        ],
+        "top1_preview": "**Situation：** 企业客服场景中，用户意图多样（咨询、投诉、查询订单、操作请求等），且存在大量隐含意图和多意"
+      },
+      {
+        "id": 103,
+        "question": "多轮对话的上下文分成哪几层？system prompt 大概占多少 token？",
+        "rank": 1,
+        "gold_chunks": [
+          13,
+          14
+        ],
+        "top1_preview": "令遵循）。\n2. **路由策略设计：**\n   ```\n   路由判断维度：\n   ├── 任务复杂度：简单检索 / 多"
+      },
+      {
+        "id": 104,
+        "question": "熔断器的三个状态是什么？半开状态是用来干什么的？",
+        "rank": 1,
+        "gold_chunks": [
+          25
+        ],
+        "top1_preview": "的 Prompt，基于评估指标选择最优版本。\n4. **常见问题处理：**\n   - LLM 有时会跳过 Thought"
+      },
+      {
+        "id": 105,
+        "question": "重排序最终选了哪个模型？为什么不直接用 Cohere 的接口？",
+        "rank": 5,
+        "gold_chunks": [
+          30
+        ],
+        "top1_preview": "捉多种语义关系。\n\n---\n\n### Q2: LoRA 的原理是什么？为什么低秩有效？\n\n**回答：**\n\n1. **L"
+      },
+      {
+        "id": 106,
+        "question": "会话摘要压缩的触发阈值是多少？以 8K 上下文为例大概是多少 token？",
+        "rank": 1,
+        "gold_chunks": [
+          33
+        ],
+        "top1_preview": "--- |\n   | 标准化   | 各模型厂商私有          | 开放协议   |\n   | 复用性   | "
+      },
+      {
+        "id": 107,
+        "question": "Milvus 的 HNSW 索引参数具体怎么调的？",
+        "rank": 2,
+        "gold_chunks": [
+          54
+        ],
+        "top1_preview": "nce < 0.6 → 追问澄清。\n\n**Result：**\n\n- 意图识别准确率达到 94%（测试集 5000 条标注"
+      },
+      {
+        "id": 108,
+        "question": "模型超时是怎么分级的？等第一个 token 最多等多久？",
+        "rank": 4,
+        "gold_chunks": [
+          63
+        ],
+        "top1_preview": "）：**\n   - 所有回答都基于检索到的知识片段，要求 LLM 只使用提供的上下文信息。\n   - Prompt 中明"
+      },
+      {
+        "id": 109,
+        "question": "多租户场景下知识库是怎么做数据隔离的？",
+        "rank": 1,
+        "gold_chunks": [
+          20
+        ],
+        "top1_preview": " * (2 ^ attempt) + random_jitter\n   base_delay = 1s, max_del"
+      },
+      {
+        "id": 110,
+        "question": "安全兜底为什么只识别极端风险信号，不把普通的烦躁也算进去？",
+        "rank": 1,
+        "gold_chunks": [
+          117
+        ],
+        "top1_preview": "ta  # 吐出去一小段\n```\n\n`yield` 让函数变成\"挤牙膏\"——每收到一小段就吐一小段，不是一次全给。\n\n#"
+      }
+    ]
+  }
+}

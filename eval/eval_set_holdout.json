@@ -1,0 +1,66 @@
+{
+  "_说明": "留出集（hold-out set）：这批题在调参时**不存在**，是参数定下来之后才写的，用来检验 300/30 那个成绩不是只在自选题上成立。判定方式与主评测集完全一致。",
+  "_用途": "回答「你自己出题自己跑分，凭什么信」这个问题：留出集的分数没被调参污染，如果它也接近主评测集，说明结论站得住；如果掉得厉害，说明之前那 100% 是过拟合。",
+  "items": [
+    {
+      "id": 101,
+      "doc": "agent-interview-qa.md",
+      "question": "Agent 编排器的核心架构用的是什么模式？需要支持哪几种执行方式？",
+      "gold_snippet": "核心架构 —— 状态机 + 事件驱动"
+    },
+    {
+      "id": 102,
+      "doc": "agent-interview-qa.md",
+      "question": "意图识别为什么要分两个阶段做？第一阶段用的是什么？",
+      "gold_snippet": "两阶段意图识别架构"
+    },
+    {
+      "id": 103,
+      "doc": "agent-interview-qa.md",
+      "question": "多轮对话的上下文分成哪几层？system prompt 大概占多少 token？",
+      "gold_snippet": "System Prompt（固定，约 800 tokens）"
+    },
+    {
+      "id": 104,
+      "doc": "agent-interview-qa.md",
+      "question": "熔断器的三个状态是什么？半开状态是用来干什么的？",
+      "gold_snippet": "HALF_OPEN（半开/探测）"
+    },
+    {
+      "id": 105,
+      "doc": "agent-interview-qa.md",
+      "question": "重排序最终选了哪个模型？为什么不直接用 Cohere 的接口？",
+      "gold_snippet": "BGE-Reranker-v2-M3"
+    },
+    {
+      "id": 106,
+      "doc": "agent-interview-qa.md",
+      "question": "会话摘要压缩的触发阈值是多少？以 8K 上下文为例大概是多少 token？",
+      "gold_snippet": "当对话历史占用超过 context window 的 40% 时触发压缩"
+    },
+    {
+      "id": 107,
+      "doc": "agent-interview-qa.md",
+      "question": "Milvus 的 HNSW 索引参数具体怎么调的？",
+      "gold_snippet": "M=16, efConstruction=200, ef=128"
+    },
+    {
+      "id": 108,
+      "doc": "agent-interview-qa.md",
+      "question": "模型超时是怎么分级的？等第一个 token 最多等多久？",
+      "gold_snippet": "首 token 超时"
+    },
+    {
+      "id": 109,
+      "doc": "agent-interview-qa.md",
+      "question": "多租户场景下知识库是怎么做数据隔离的？",
+      "gold_snippet": "每个租户在 Milvus 中使用独立的 Collection"
+    },
+    {
+      "id": 110,
+      "doc": "echo-project-notes.md",
+      "question": "安全兜底为什么只识别极端风险信号，不把普通的烦躁也算进去？",
+      "gold_snippet": "只识别极端风险"
+    }
+  ]
+}

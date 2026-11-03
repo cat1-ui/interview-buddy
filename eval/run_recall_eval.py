@@ -186,9 +186,12 @@ def main():
     parser.add_argument("--chunk-sizes", nargs="+", type=int, default=[300, 500, 800])
     parser.add_argument("--overlap-ratio", type=float, default=0.1,
                         help="重叠比例，默认 0.1（与线上 500/50 一致）")
+    parser.add_argument("--eval-set", default=str(EVAL_SET),
+                        help="评测集路径，默认 eval_set.json；留出集有单独的结果文件")
     args = parser.parse_args()
 
-    data = json.loads(EVAL_SET.read_text(encoding="utf-8"))
+    eval_path = Path(args.eval_set)
+    data = json.loads(eval_path.read_text(encoding="utf-8"))
     items = data["items"]
     corpus_texts = {
         p.name: p.read_text(encoding="utf-8").strip()
@@ -200,7 +203,7 @@ def main():
     print(f"评测集：{len(items)} 题\n")
 
     # 问题向量与切分粒度无关，只算一次，省调用也省时间
-    print("向量化 20 个问题…")
+    print(f"向量化 {len(items)} 个问题…")
     query_vectors = embed_with_retry([it["question"] for it in items])
 
     all_metrics = []
@@ -218,8 +221,10 @@ def main():
         all_details[size] = d
 
     # ---- 输出报告 ----
+    stem = eval_path.stem
+    suffix = "" if stem == "eval_set" else "_" + stem.replace("eval_set_", "")
     lines = []
-    lines.append("# 检索质量评测报告\n")
+    lines.append(f"# 检索质量评测报告{'' if not suffix else f'（{suffix}）'}\n")
     lines.append(f"- 语料：{len(corpus_texts)} 篇 / "
                  f"{sum(len(t) for t in corpus_texts.values())} 字")
     lines.append(f"- 评测集：{len(items)} 题（标注原文片段，字符串匹配判定）")
@@ -239,14 +244,14 @@ def main():
             lines.append(f"- Q{d['id']} 未进前 6：{d['question']}")
 
     report = "\n".join(lines) + "\n"
-    (EVAL_DIR / "results.md").write_text(report, encoding="utf-8")
-    (EVAL_DIR / "results.json").write_text(
+    (EVAL_DIR / f"results{suffix}.md").write_text(report, encoding="utf-8")
+    (EVAL_DIR / f"results{suffix}.json").write_text(
         json.dumps({"metrics": all_metrics, "details": all_details},
                    ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
     print("\n" + report)
-    print("报告已写入 eval/results.md 与 eval/results.json")
+    print(f"报告已写入 eval/results{suffix}.md 与 eval/results{suffix}.json")
 
 
 if __name__ == "__main__":
