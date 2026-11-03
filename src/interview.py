@@ -15,7 +15,7 @@
 from fastapi import HTTPException
 from openai import OpenAI
 
-from src.config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL
+from src.config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, SIMILARITY_THRESHOLD
 from src.rag import RagService
 
 
@@ -252,6 +252,8 @@ class InterviewService:
                     embed_fn = embedding.embed_text
                 topic_vector = embed_fn(session.topic)
                 related = self.vector_store.search(topic_vector, top_k=3)
+                # 相关度门槛：过滤掉与该方向相似度不足的片段，避免基于无关内容出题
+                related = [r for r in related if r["score"] >= SIMILARITY_THRESHOLD]
             except Exception:
                 related = []
             if related:

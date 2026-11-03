@@ -52,6 +52,9 @@ CHUNK_OVERLAP = 30
 TOP_K = 4
 # embedding 批量请求时，每批最多多少段
 EMBED_BATCH_SIZE = 32
-# 检索相似度阈值：top1 分数低于此值的，视为"没有相关资料"。
-# 默认 0 表示不启用（先观察分数分布再定值）。
-SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", "0"))
+# 检索相似度阈值：top1 分数低于此值的片段会被过滤，视为"与该方向无关"。
+# 依据 eval/dump_similarity_scores.py 对真实资料（data/docs）的实测分布：
+#   资料内主题 top1 分数 0.51~0.63（最低 0.5058）
+#   资料外主题 top1 分数 0.28~0.47（最高 0.4711）
+# 两组之间有清晰间隙，取 0.48：滤掉无关片段、又不误伤相关片段。
+SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", "0.48"))
