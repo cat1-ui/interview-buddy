@@ -143,6 +143,8 @@ python eval/run_recall_eval.py --eval-set eval/eval_set_holdout.json  # 留出�
 真正稳健的是 **Recall@4**：粒度越细命中越多（30/30 → 29/30 → 28/30），两个集合方向一致。
 所以最终按 Recall@4 决策取 300 / 30，顺便把单次送入模型的上下文从 4×500 字降到 4×300 字。
 
+> 这套评测怎么在面试里讲、哪些话不能说，见 [docs/interview-notes.md](docs/interview-notes.md)。
+
 ## 首字延迟（TTFT）
 
 流式不是玄学，量一下就知道省了多少等待：
