@@ -1,0 +1,133 @@
+{
+  "summary": {
+    "meta_median": 0.6056255000003148,
+    "first_delta_median": 1.3342938000005233,
+    "stream_total_median": 2.1198219999987487,
+    "block_total_median": 1.9809450499978993,
+    "perceived_wait_cut_pct": 32.6
+  },
+  "stream": [
+    {
+      "question": "长期记忆是怎么提取和使用的？",
+      "t_meta": 0.607761200000823,
+      "t_first_delta": 1.4987870000004477,
+      "t_total": 2.59831590000249,
+      "chars": 404
+    },
+    {
+      "question": "长期记忆是怎么提取和使用的？",
+      "t_meta": 0.5816663000005065,
+      "t_first_delta": 1.1737228000019968,
+      "t_total": 2.1841893999990134,
+      "chars": 375
+    },
+    {
+      "question": "Function Calling 的原理是什么？",
+      "t_meta": 0.5665377999976045,
+      "t_first_delta": 1.4036328000001959,
+      "t_total": 2.1105924000003142,
+      "chars": 333
+    },
+    {
+      "question": "Function Calling 的原理是什么？",
+      "t_meta": 0.5943714999993972,
+      "t_first_delta": 1.0756430000001274,
+      "t_total": 2.129051599997183,
+      "chars": 481
+    },
+    {
+      "question": "让模型稳定输出 JSON 有哪些防线？",
+      "t_meta": 0.6034897999998066,
+      "t_first_delta": 1.3116062000008242,
+      "t_total": 1.6059114999989106,
+      "chars": 104
+    },
+    {
+      "question": "让模型稳定输出 JSON 有哪些防线？",
+      "t_meta": 0.616426099997625,
+      "t_first_delta": 1.1686225999983435,
+      "t_total": 2.285813699996652,
+      "chars": 111
+    },
+    {
+      "question": "流式输出是怎么实现的？",
+      "t_meta": 0.6077929999992193,
+      "t_first_delta": 1.2834146999994118,
+      "t_total": 2.067513699999836,
+      "chars": 433
+    },
+    {
+      "question": "流式输出是怎么实现的？",
+      "t_meta": 0.5852995999994164,
+      "t_first_delta": 1.3569814000002225,
+      "t_total": 2.1738631000007445,
+      "chars": 440
+    },
+    {
+      "question": "不同任务为什么要用不同的 temperature？",
+      "t_meta": 0.6701662999985274,
+      "t_first_delta": 1.383820499999274,
+      "t_total": 2.0506544999989273,
+      "chars": 183
+    },
+    {
+      "question": "不同任务为什么要用不同的 temperature？",
+      "t_meta": 0.6397925999990548,
+      "t_first_delta": 1.627052799998637,
+      "t_total": 1.8840084000003117,
+      "chars": 198
+    }
+  ],
+  "nonstream": [
+    {
+      "question": "长期记忆是怎么提取和使用的？",
+      "t_total": 2.5052060000016354,
+      "chars": 375
+    },
+    {
+      "question": "长期记忆是怎么提取和使用的？",
+      "t_total": 2.005551900001592,
+      "chars": 383
+    },
+    {
+      "question": "Function Calling 的原理是什么？",
+      "t_total": 1.8967107999997097,
+      "chars": 336
+    },
+    {
+      "question": "Function Calling 的原理是什么？",
+      "t_total": 1.985618999999133,
+      "chars": 336
+    },
+    {
+      "question": "让模型稳定输出 JSON 有哪些防线？",
+      "t_total": 1.4297378999981447,
+      "chars": 111
+    },
+    {
+      "question": "让模型稳定输出 JSON 有哪些防线？",
+      "t_total": 1.4912182000007306,
+      "chars": 111
+    },
+    {
+      "question": "流式输出是怎么实现的？",
+      "t_total": 2.2867789000010816,
+      "chars": 358
+    },
+    {
+      "question": "流式输出是怎么实现的？",
+      "t_total": 2.1375017999998818,
+      "chars": 228
+    },
+    {
+      "question": "不同任务为什么要用不同的 temperature？",
+      "t_total": 1.9207433000010496,
+      "chars": 186
+    },
+    {
+      "question": "不同任务为什么要用不同的 temperature？",
+      "t_total": 1.9762710999966657,
+      "chars": 197
+    }
+  ]
+}
