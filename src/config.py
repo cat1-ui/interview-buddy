@@ -41,9 +41,12 @@ CORS_ORIGINS = os.getenv(
 
 # ============ RAG 参数 ============
 # 文档切分：每段最大字符数
-CHUNK_SIZE = 500
-# 相邻段重叠字符数（防止一句话被切断导致信息丢失）
-CHUNK_OVERLAP = 50
+# 300 是实测值，不是拍脑袋：用 eval/run_recall_eval.py 的 20 题评测集对比
+# 300/500/800 三档，500（原默认）反而最差 —— Recall@1 仅 30%、Recall@4 95%，
+# 300 则是 Recall@1 50%、Recall@4 100% 且无未命中。原因见 eval/results.md。
+CHUNK_SIZE = 300
+# 相邻段重叠字符数（防止一句话被切断导致信息丢失），取切分粒度的 10%
+CHUNK_OVERLAP = 30
 # 检索时返回最相关的几段
 TOP_K = 4
 # embedding 批量请求时，每批最多多少段

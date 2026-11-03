@@ -1,0 +1,592 @@
+{
+  "metrics": [
+    {
+      "recall@1": 0.5,
+      "recall@2": 0.9,
+      "recall@4": 1.0,
+      "recall@6": 1.0,
+      "mrr@6": 0.7291666666666667,
+      "miss": 0,
+      "chunk_size": 300,
+      "overlap": 30,
+      "chunk_count": 318
+    },
+    {
+      "recall@1": 0.3,
+      "recall@2": 0.65,
+      "recall@4": 0.95,
+      "recall@6": 0.95,
+      "mrr@6": 0.5708333333333333,
+      "miss": 1,
+      "chunk_size": 500,
+      "overlap": 50,
+      "chunk_count": 192
+    },
+    {
+      "recall@1": 0.55,
+      "recall@2": 0.9,
+      "recall@4": 0.95,
+      "recall@6": 0.95,
+      "mrr@6": 0.7375,
+      "miss": 1,
+      "chunk_size": 800,
+      "overlap": 80,
+      "chunk_count": 120
+    }
+  ],
+  "details": {
+    "300": [
+      {
+        "id": 1,
+        "question": "ReAct 模式的执行循环具体是怎样的？为什么它比先规划后执行更适合客服场景？",
+        "rank": 2,
+        "gold_chunks": [
+          2
+        ],
+        "top1_preview": "效防止死循环。\n4. **混合方案设计：**\n   - 实际落地中采用 ReAct 为主、Plan 为辅的混合方案。\n "
+      },
+      {
+        "id": 2,
+        "question": "为什么精确编号类的查询不适合只用向量检索？",
+        "rank": 2,
+        "gold_chunks": [
+          5
+        ],
+        "top1_preview": "询检索相关段落：\"）。\n\n---\n\n### Q7: 向量数据库的索引原理是什么？HNSW 怎么工作的？\n\n**回答：**"
+      },
+      {
+        "id": 3,
+        "question": "选型时为什么排除了 FAISS 和 Chroma？",
+        "rank": 1,
+        "gold_chunks": [
+          19,
+          20
+        ],
+        "top1_preview": "- **FAISS：** 单机库，不支持分布式，无法满足高可用和数据持久化需求。\n   - **Chroma：** 定位"
+      },
+      {
+        "id": 4,
+        "question": "MCP 协议定义了哪三大原语？它基于什么通信协议？",
+        "rank": 3,
+        "gold_chunks": [
+          49
+        ],
+        "top1_preview": "，通过标准协议通信。\n   - **生态复用：** 一个 MCP Server 可以被任何 MCP Client 使用。"
+      },
+      {
+        "id": 5,
+        "question": "默认的递归字符分块用哪些分隔符？chunk_size 和 overlap 设成多少？",
+        "rank": 1,
+        "gold_chunks": [
+          61
+        ],
+        "top1_preview": " → `，` → 空格\n     - chunk_size = 512 tokens，chunk_overlap = 5"
+      },
+      {
+        "id": 6,
+        "question": "Function Calling 和 MCP 在工具定义的位置上有什么区别？",
+        "rank": 2,
+        "gold_chunks": [
+          86
+        ],
+        "top1_preview": " Calling 的对比：**\n   - Function Calling 是模型厂商的私有协议，每个厂商格式不同。\n "
+      },
+      {
+        "id": 7,
+        "question": "RRF 融合排序的公式是什么？",
+        "rank": 1,
+        "gold_chunks": [
+          93
+        ],
+        "top1_preview": "对比完整历史的 96%）。\n- Token 节省约 60%（长对话场景）。\n\n---\n\n### Q9: RRF 融合排序"
+      },
+      {
+        "id": 8,
+        "question": "选嵌入模型时要在哪些指标之间权衡？",
+        "rank": 1,
+        "gold_chunks": [
+          97
+        ],
+        "top1_preview": "%。\n\n---\n\n### Q10: 嵌入模型用的什么？维度多少？怎么选的？\n\n**Situation：** 嵌入模型的选"
+      },
+      {
+        "id": 9,
+        "question": "输入 token 数量在客户端怎么预计算？OpenAI 用什么库？",
+        "rank": 1,
+        "gold_chunks": [
+          125
+        ],
+        "top1_preview": "\n- 系统回答质量在 6 个月内稳步提升 18%。\n\n---\n\n### Q17: Token 计数和费用统计是怎么实现的"
+      },
+      {
+        "id": 10,
+        "question": "延迟优化前后，检索环节的耗时从多少降到多少？",
+        "rank": 2,
+        "gold_chunks": [
+          134
+        ],
+        "top1_preview": "5530ms → 3130ms\n   ```\n2. **优化措施：**\n   - **检索并行化：** 多路检索从串行改"
+      },
+      {
+        "id": 11,
+        "question": "L1 精确匹配缓存的 key 怎么生成？",
+        "rank": 1,
+        "gold_chunks": [
+          137
+        ],
+        "top1_preview": "么？命中率多少？\n\n**Situation：** 企业客服场景存在大量重复和相似的问题，每次都调用 LLM 浪费资源。\n"
+      },
+      {
+        "id": 12,
+        "question": "防止 Agent 死循环的硬性限制有哪些？",
+        "rank": 1,
+        "gold_chunks": [
+          162
+        ],
+        "top1_preview": "环。例如检索结果不满意时反复重新检索，或反复调用同一工具但参数不变。\n\n**Task：** 设计检测和防止 Agent "
+      },
+      {
+        "id": 13,
+        "question": "检索结果不准时，怎么判断是分块问题还是 embedding 问题？",
+        "rank": 2,
+        "gold_chunks": [
+          171
+        ],
+        "top1_preview": "，GPU 利用率最大化。\n   - 使用 DataLoader 预加载数据，避免 GPU 等待 CPU 数据处理。\n2."
+      },
+      {
+        "id": 14,
+        "question": "控制模型幻觉最重要的一层是什么？",
+        "rank": 2,
+        "gold_chunks": [
+          165
+        ],
+        "top1_preview": "\"信息可能不完整\"。\n4. **根因分析和预防：**\n   - 所有死循环事件记录日志，定期分析根因。\n   - 常见根"
+      },
+      {
+        "id": 15,
+        "question": "长期记忆是靠代码规则提取，还是让模型自己提取？",
+        "rank": 2,
+        "gold_chunks": [
+          296
+        ],
+        "top1_preview": "ows = cursor.fetchall()\n    rows = list(rows)[::-1]  # 倒过来，变"
+      },
+      {
+        "id": 16,
+        "question": "用户的长期记忆在下次对话时怎么被用上？",
+        "rank": 2,
+        "gold_chunks": [
+          299,
+          300
+        ],
+        "top1_preview": "*\n   - 存储位置：PostgreSQL（结构化信息）+ Milvus（语义检索）。\n   - 内容：\n     -"
+      },
+      {
+        "id": 17,
+        "question": "Function Calling 里模型不直接给答案，而是返回什么？",
+        "rank": 4,
+        "gold_chunks": [
+          304
+        ],
+        "top1_preview": ", 999999999)\n    summary_text = summary_service.generate_sum"
+      },
+      {
+        "id": 18,
+        "question": "计算器工具用了 eval，怎么防止代码注入？",
+        "rank": 1,
+        "gold_chunks": [
+          308,
+          309
+        ],
+        "top1_preview": "== \"get_weather\":\n        return get_weather(func_args.get(\""
+      },
+      {
+        "id": 19,
+        "question": "风险判断任务该用多少温度？为什么？",
+        "rank": 1,
+        "gold_chunks": [
+          313
+        ],
+        "top1_preview": "烦、压力大\"误判成危险——避免过度干预，把握陪伴的分寸。\n\n---\n\n## 10. 温度 temperature 梯度（"
+      },
+      {
+        "id": 20,
+        "question": "让模型稳定输出 JSON 的三层防线是什么？",
+        "rank": 1,
+        "gold_chunks": [
+          314
+        ],
+        "top1_preview": "同温度。**\n\n---\n\n## 11. 让模型稳定输出 JSON 的三层防线\n\n模型输出 JSON 时经常加废话、格式乱"
+      }
+    ],
+    "500": [
+      {
+        "id": 1,
+        "question": "ReAct 模式的执行循环具体是怎样的？为什么它比先规划后执行更适合客服场景？",
+        "rank": 2,
+        "gold_chunks": [
+          1
+        ],
+        "top1_preview": "的流式特性天然支持\"边思考边输出\"，用户体验更好。\n3. **技术可行性评估：**\n   - ReAct 的 Promp"
+      },
+      {
+        "id": 2,
+        "question": "为什么精确编号类的查询不适合只用向量检索？",
+        "rank": 2,
+        "gold_chunks": [
+          3
+        ],
+        "top1_preview": "他样本的正样本作为当前样本的负样本。\n   - **Hard Negatives：** 挖掘语义相近但答案不同的样本（更"
+      },
+      {
+        "id": 3,
+        "question": "选型时为什么排除了 FAISS 和 Chroma？",
+        "rank": 1,
+        "gold_chunks": [
+          11,
+          12
+        ],
+        "top1_preview": "- **FAISS：** 单机库，不支持分布式，无法满足高可用和数据持久化需求。\n   - **Chroma：** 定位"
+      },
+      {
+        "id": 4,
+        "question": "MCP 协议定义了哪三大原语？它基于什么通信协议？",
+        "rank": 3,
+        "gold_chunks": [
+          29
+        ],
+        "top1_preview": "*耦合模型：** 不同模型的 Function Calling 格式有差异。\n2. **MCP 特点：**\n   - *"
+      },
+      {
+        "id": 5,
+        "question": "默认的递归字符分块用哪些分隔符？chunk_size 和 overlap 设成多少？",
+        "rank": 3,
+        "gold_chunks": [
+          36
+        ],
+        "top1_preview": "制（如 GPT-4 的 8K/32K/128K）。\n\n**Task：** 设计一套长文档处理方案，在不丢失关键信息的前提"
+      },
+      {
+        "id": 6,
+        "question": "Function Calling 和 MCP 在工具定义的位置上有什么区别？",
+        "rank": 3,
+        "gold_chunks": [
+          51
+        ],
+        "top1_preview": " Calling 的对比：**\n   - Function Calling 是模型厂商的私有协议，每个厂商格式不同。\n "
+      },
+      {
+        "id": 7,
+        "question": "RRF 融合排序的公式是什么？",
+        "rank": 1,
+        "gold_chunks": [
+          56
+        ],
+        "top1_preview": "多路检索（向量 + 关键词 + 知识图谱）各自返回排序结果，需要融合成统一的排序。\n\n**Task：** 实现一个公平、"
+      },
+      {
+        "id": 8,
+        "question": "选嵌入模型时要在哪些指标之间权衡？",
+        "rank": 2,
+        "gold_chunks": [
+          58
+        ],
+        "top1_preview": "升本地模型的推理速度，降低延迟。\n\n**Action：**\n\n1. **模型量化：**\n   - Embedding 模"
+      },
+      {
+        "id": 9,
+        "question": "输入 token 数量在客户端怎么预计算？OpenAI 用什么库？",
+        "rank": 1,
+        "gold_chunks": [
+          75
+        ],
+        "top1_preview": "\n- 系统回答质量在 6 个月内稳步提升 18%。\n\n---\n\n### Q17: Token 计数和费用统计是怎么实现的"
+      },
+      {
+        "id": 10,
+        "question": "延迟优化前后，检索环节的耗时从多少降到多少？",
+        "rank": 2,
+        "gold_chunks": [
+          80
+        ],
+        "top1_preview": "5530ms → 3130ms\n   ```\n2. **优化措施：**\n   - **检索并行化：** 多路检索从串行改"
+      },
+      {
+        "id": 11,
+        "question": "L1 精确匹配缓存的 key 怎么生成？",
+        "rank": 1,
+        "gold_chunks": [
+          82
+        ],
+        "top1_preview": "s 降低到 2.8s。\n- P99 延迟从 15s 降低到 5.2s。\n- 流式输出的 TTFT 为 500ms，用户满"
+      },
+      {
+        "id": 12,
+        "question": "防止 Agent 死循环的硬性限制有哪些？",
+        "rank": 2,
+        "gold_chunks": [
+          97
+        ],
+        "top1_preview": "plicas: 2\n     maxReplicas: 10\n     metrics:\n       - type: "
+      },
+      {
+        "id": 13,
+        "question": "检索结果不准时，怎么判断是分块问题还是 embedding 问题？",
+        "rank": 3,
+        "gold_chunks": [
+          102
+        ],
+        "top1_preview": "ng 计算。\n\n**Task：** 优化 embedding 计算的吞吐量和效率。\n\n**Action：**\n\n1. *"
+      },
+      {
+        "id": 14,
+        "question": "控制模型幻觉最重要的一层是什么？",
+        "rank": 2,
+        "gold_chunks": [
+          99
+        ],
+        "top1_preview": "3. **处理策略：**\n   - 检测到循环后，在下一次 Thought 的 Prompt 中注入提示：\n     `"
+      },
+      {
+        "id": 15,
+        "question": "长期记忆是靠代码规则提取，还是让模型自己提取？",
+        "rank": 4,
+        "gold_chunks": [
+          178
+        ],
+        "top1_preview": "`db.py` 的 `get_recent_messages`）：**\n\n```python\ndef get_recen"
+      },
+      {
+        "id": 16,
+        "question": "用户的长期记忆在下次对话时怎么被用上？",
+        "rank": 3,
+        "gold_chunks": [
+          180
+        ],
+        "top1_preview": "ct_memories(self, user_text, assistant_text):\n    prompt = E"
+      },
+      {
+        "id": 17,
+        "question": "Function Calling 里模型不直接给答案，而是返回什么？",
+        "rank": null,
+        "gold_chunks": [
+          183
+        ],
+        "top1_preview": "] if latest else 0\n\n    if total - last_pos < SUMMARY_INTERV"
+      },
+      {
+        "id": 18,
+        "question": "计算器工具用了 eval，怎么防止代码注入？",
+        "rank": 1,
+        "gold_chunks": [
+          185,
+          186
+        ],
+        "top1_preview": "c_name, func_args):\n    if func_name == \"calculate\":\n       "
+      },
+      {
+        "id": 19,
+        "question": "风险判断任务该用多少温度？为什么？",
+        "rank": 2,
+        "gold_chunks": [
+          188
+        ],
+        "top1_preview": "erature（温度参数）：**\n   ```\n   P(token_i) = exp(logit_i / T) / Σ"
+      },
+      {
+        "id": 20,
+        "question": "让模型稳定输出 JSON 的三层防线是什么？",
+        "rank": 1,
+        "gold_chunks": [
+          189
+        ],
+        "top1_preview": "同温度。**\n\n---\n\n## 11. 让模型稳定输出 JSON 的三层防线\n\n模型输出 JSON 时经常加废话、格式乱"
+      }
+    ],
+    "800": [
+      {
+        "id": 1,
+        "question": "ReAct 模式的执行循环具体是怎样的？为什么它比先规划后执行更适合客服场景？",
+        "rank": 2,
+        "gold_chunks": [
+          0
+        ],
+        "top1_preview": "xecute**：先制定完整计划，再按步骤执行，适合任务结构明确、步骤可预见的场景。\n2. **基于业务场景评估：**\n"
+      },
+      {
+        "id": 2,
+        "question": "为什么精确编号类的查询不适合只用向量检索？",
+        "rank": 2,
+        "gold_chunks": [
+          1,
+          2
+        ],
+        "top1_preview": "nce < 0.6 → 追问澄清。\n\n**Result：**\n\n- 意图识别准确率达到 94%（测试集 5000 条标注"
+      },
+      {
+        "id": 3,
+        "question": "选型时为什么排除了 FAISS 和 Chroma？",
+        "rank": 2,
+        "gold_chunks": [
+          7
+        ],
+        "top1_preview": "捉多种语义关系。\n\n---\n\n### Q2: LoRA 的原理是什么？为什么低秩有效？\n\n**回答：**\n\n1. **L"
+      },
+      {
+        "id": 4,
+        "question": "MCP 协议定义了哪三大原语？它基于什么通信协议？",
+        "rank": 2,
+        "gold_chunks": [
+          18
+        ],
+        "top1_preview": "s 响应时间中占比可接受。\n\n---\n\n### Q7: Function Calling 和 MCP 有什么区别？你怎么"
+      },
+      {
+        "id": 5,
+        "question": "默认的递归字符分块用哪些分隔符？chunk_size 和 overlap 设成多少？",
+        "rank": null,
+        "gold_chunks": [
+          22
+        ],
+        "top1_preview": "ult：**\n\n- 支持 6 种模型提供商，切换只需改配置。\n- 新模型适配：平均 1 天完成（实现 Provider "
+      },
+      {
+        "id": 6,
+        "question": "Function Calling 和 MCP 在工具定义的位置上有什么区别？",
+        "rank": 1,
+        "gold_chunks": [
+          32
+        ],
+        "top1_preview": "s 响应时间中占比可接受。\n\n---\n\n### Q7: Function Calling 和 MCP 有什么区别？你怎么"
+      },
+      {
+        "id": 7,
+        "question": "RRF 融合排序的公式是什么？",
+        "rank": 1,
+        "gold_chunks": [
+          35
+        ],
+        "top1_preview": "多路检索（向量 + 关键词 + 知识图谱）各自返回排序结果，需要融合成统一的排序。\n\n**Task：** 实现一个公平、"
+      },
+      {
+        "id": 8,
+        "question": "选嵌入模型时要在哪些指标之间权衡？",
+        "rank": 2,
+        "gold_chunks": [
+          36
+        ],
+        "top1_preview": "捉多种语义关系。\n\n---\n\n### Q2: LoRA 的原理是什么？为什么低秩有效？\n\n**回答：**\n\n1. **L"
+      },
+      {
+        "id": 9,
+        "question": "输入 token 数量在客户端怎么预计算？OpenAI 用什么库？",
+        "rank": 1,
+        "gold_chunks": [
+          47
+        ],
+        "top1_preview": "ken 计费，需要精确统计每次调用的 token 消耗，用于成本控制和计费。\n\n**Task：** 实现精确的 toke"
+      },
+      {
+        "id": 10,
+        "question": "延迟优化前后，检索环节的耗时从多少降到多少？",
+        "rank": 1,
+        "gold_chunks": [
+          50
+        ],
+        "top1_preview": " - 设置 max_tokens 限制（一般回答 512，详细回答 1024）。\n   - 避免 LLM 生成冗长的无用"
+      },
+      {
+        "id": 11,
+        "question": "L1 精确匹配缓存的 key 怎么生成？",
+        "rank": 2,
+        "gold_chunks": [
+          51
+        ],
+        "top1_preview": "    - 通过意图匹配命中 FAQ。\n     - 长期有效（手动更新）。\n     - 命中率：约 5%。\n2. *"
+      },
+      {
+        "id": 12,
+        "question": "防止 Agent 死循环的硬性限制有哪些？",
+        "rank": 1,
+        "gold_chunks": [
+          60
+        ],
+        "top1_preview": "plicas: 2\n     maxReplicas: 10\n     metrics:\n       - type: "
+      },
+      {
+        "id": 13,
+        "question": "检索结果不准时，怎么判断是分块问题还是 embedding 问题？",
+        "rank": 1,
+        "gold_chunks": [
+          64
+        ],
+        "top1_preview": "从 0% 提升到 95%（降级兜底）。\n\n---\n\n### Q4: 检索结果不准确怎么办？\n\n**Situation：*"
+      },
+      {
+        "id": 14,
+        "question": "控制模型幻觉最重要的一层是什么？",
+        "rank": 1,
+        "gold_chunks": [
+          61
+        ],
+        "top1_preview": "结束。\n   - 最大 token 消耗：单次请求总 token ≤ 30000。\n2. **智能检测：**\n   - "
+      },
+      {
+        "id": 15,
+        "question": "长期记忆是靠代码规则提取，还是让模型自己提取？",
+        "rank": 1,
+        "gold_chunks": [
+          111
+        ],
+        "top1_preview": "conversation_id=? ORDER BY id DESC LIMIT ?\",\n        (conver"
+      },
+      {
+        "id": 16,
+        "question": "用户的长期记忆在下次对话时怎么被用上？",
+        "rank": 1,
+        "gold_chunks": [
+          112,
+          113
+        ],
+        "top1_preview": "ct_memories(self, user_text, assistant_text):\n    prompt = E"
+      },
+      {
+        "id": 17,
+        "question": "Function Calling 里模型不直接给答案，而是返回什么？",
+        "rank": 1,
+        "gold_chunks": [
+          114
+        ],
+        "top1_preview": "\n    # 只取\"上次之后新增的\"消息来总结\n    new_messages = db.get_messages_r"
+      },
+      {
+        "id": 18,
+        "question": "计算器工具用了 eval，怎么防止代码注入？",
+        "rank": 4,
+        "gold_chunks": [
+          116
+        ],
+        "top1_preview": "5*67890\"})` 真正执行 `eval(\"12345*67890\")`，得到结果\n3. 把结果喂回模型，模型说：\""
+      },
+      {
+        "id": 19,
+        "question": "风险判断任务该用多少温度？为什么？",
+        "rank": 2,
+        "gold_chunks": [
+          118
+        ],
+        "top1_preview": "ta  # 吐出去一小段\n```\n\n`yield` 让函数变成\"挤牙膏\"——每收到一小段就吐一小段，不是一次全给。\n\n#"
+      },
+      {
+        "id": 20,
+        "question": "让模型稳定输出 JSON 的三层防线是什么？",
+        "rank": 1,
+        "gold_chunks": [
+          118
+        ],
+        "top1_preview": "----|------|--------|\n| 聊天 | 0.8 | 要活泼、像真人 |\n| 情绪洞察 | 0.6 | "
+      }
+    ]
+  }
+}

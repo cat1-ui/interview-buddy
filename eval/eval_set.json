@@ -1,0 +1,126 @@
+{
+  "_说明": "检索评测集。每条 = 一个问题 + 一段黄金原文片段（gold_snippet）。判定方式：Top-K 检索结果里，只要有任意一段包含 gold_snippet，即算该题命中。gold_snippet 必须是语料中的原文，脚本会做存在性校验，找不到就直接报错，避免标注写错却悄悄算分。",
+  "_版本": "v1",
+  "items": [
+    {
+      "id": 1,
+      "doc": "agent-interview-qa.md",
+      "question": "ReAct 模式的执行循环具体是怎样的？为什么它比先规划后执行更适合客服场景？",
+      "gold_snippet": "思考-行动-观察的循环模式"
+    },
+    {
+      "id": 2,
+      "doc": "agent-interview-qa.md",
+      "question": "为什么精确编号类的查询不适合只用向量检索？",
+      "gold_snippet": "工单号 WO-20240315-001"
+    },
+    {
+      "id": 3,
+      "doc": "agent-interview-qa.md",
+      "question": "选型时为什么排除了 FAISS 和 Chroma？",
+      "gold_snippet": "单机库，不支持分布式，无法满足高可用和数据持久化需求"
+    },
+    {
+      "id": 4,
+      "doc": "agent-interview-qa.md",
+      "question": "MCP 协议定义了哪三大原语？它基于什么通信协议？",
+      "gold_snippet": "定义了 tools、resources、prompts 三大原语"
+    },
+    {
+      "id": 5,
+      "doc": "agent-interview-qa.md",
+      "question": "默认的递归字符分块用哪些分隔符？chunk_size 和 overlap 设成多少？",
+      "gold_snippet": "chunk_size = 512 tokens，chunk_overlap = 50 tokens"
+    },
+    {
+      "id": 6,
+      "doc": "agent-interview-qa.md",
+      "question": "Function Calling 和 MCP 在工具定义的位置上有什么区别？",
+      "gold_snippet": "工具定义作为 API 请求的一部分发送给模型"
+    },
+    {
+      "id": 7,
+      "doc": "agent-interview-qa.md",
+      "question": "RRF 融合排序的公式是什么？",
+      "gold_snippet": "RRF_score(d) = Σ(i=1 to n) 1 / (k + rank_i(d))"
+    },
+    {
+      "id": 8,
+      "doc": "agent-interview-qa.md",
+      "question": "选嵌入模型时要在哪些指标之间权衡？",
+      "gold_snippet": "在效果、速度、成本之间找到平衡"
+    },
+    {
+      "id": 9,
+      "doc": "agent-interview-qa.md",
+      "question": "输入 token 数量在客户端怎么预计算？OpenAI 用什么库？",
+      "gold_snippet": "使用 tiktoken 库"
+    },
+    {
+      "id": 10,
+      "doc": "agent-interview-qa.md",
+      "question": "延迟优化前后，检索环节的耗时从多少降到多少？",
+      "gold_snippet": "检索（串行）：500ms → 并行后 200ms"
+    },
+    {
+      "id": 11,
+      "doc": "agent-interview-qa.md",
+      "question": "L1 精确匹配缓存的 key 怎么生成？",
+      "gold_snippet": "Key：query 文本的 MD5 hash"
+    },
+    {
+      "id": 12,
+      "doc": "agent-interview-qa.md",
+      "question": "防止 Agent 死循环的硬性限制有哪些？",
+      "gold_snippet": "max_iterations = 10"
+    },
+    {
+      "id": 13,
+      "doc": "agent-interview-qa.md",
+      "question": "检索结果不准时，怎么判断是分块问题还是 embedding 问题？",
+      "gold_snippet": "分块问题：关键信息被切断 → 优化分块策略"
+    },
+    {
+      "id": 14,
+      "doc": "agent-interview-qa.md",
+      "question": "控制模型幻觉最重要的一层是什么？",
+      "gold_snippet": "RAG 基础（最重要）"
+    },
+    {
+      "id": 15,
+      "doc": "echo-project-notes.md",
+      "question": "长期记忆是靠代码规则提取，还是让模型自己提取？",
+      "gold_snippet": "请从这句话里提取值得记住的信息，只输出 JSON"
+    },
+    {
+      "id": 16,
+      "doc": "echo-project-notes.md",
+      "question": "用户的长期记忆在下次对话时怎么被用上？",
+      "gold_snippet": "以下是关于用户的长期记忆，请自然运用"
+    },
+    {
+      "id": 17,
+      "doc": "echo-project-notes.md",
+      "question": "Function Calling 里模型不直接给答案，而是返回什么？",
+      "gold_snippet": "想调用 XX 函数，参数是 YY"
+    },
+    {
+      "id": 18,
+      "doc": "echo-project-notes.md",
+      "question": "计算器工具用了 eval，怎么防止代码注入？",
+      "gold_snippet": "表达式包含非法字符，已拒绝执行"
+    },
+    {
+      "id": 19,
+      "doc": "echo-project-notes.md",
+      "question": "风险判断任务该用多少温度？为什么？",
+      "gold_snippet": "要最保守，别乱触发"
+    },
+    {
+      "id": 20,
+      "doc": "echo-project-notes.md",
+      "question": "让模型稳定输出 JSON 的三层防线是什么？",
+      "gold_snippet": "解析失败就返回空列表，宁可不存，不让程序崩"
+    }
+  ]
+}
