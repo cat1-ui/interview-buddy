@@ -37,12 +37,30 @@ class FakeCompletions:
         self._reply = reply
         self.calls = []
 
+    def _extract_answer(self, text):
+        """从 V2 判断 prompt 里抠出"候选人回答"部分，用于模拟放弃判断。"""
+        marker = "候选人回答："
+        idx = text.find(marker)
+        if idx == -1:
+            return text
+        rest = text[idx + len(marker):]
+        end = rest.find("判断规则")
+        if end != -1:
+            rest = rest[:end]
+        return rest
+
     def create(self, **kwargs):
         self.calls.append(kwargs)
         text = " ".join(m.get("content", "") for m in kwargs.get("messages", []))
-        # 出题 prompt 里带"请出一道"；打分 prompt 里带"JSON 格式"；其余是回应
+        # 出题 prompt 里带"请出一道"；放弃判断带"give_up"；打分 prompt 带"JSON 格式"；其余是回应
         if "请出一道" in text:
             return _Response(self._question)
+        if "give_up" in text:
+            answer = self._extract_answer(text)
+            give_up = any(k in answer for k in ("不知道", "不会", "没学过", "想不起来", "不清楚", "不了解"))
+            if give_up:
+                return _Response('{"give_up": true, "reply": "没关系，我们看下一题"}')
+            return _Response('{"give_up": false, "reply": "那你展开说说原理？"}')
         if "JSON 格式" in text:
             return _Response(SCORE_JSON)
         return _Response(self._reply)
@@ -129,7 +147,7 @@ def test_give_up_comfort_and_next_question():
     assert "请解释什么是 RAG？" in r["reply"]  # 回复里带出了下一题
 
 
-def test_last_question_farewell():
+def test_last_question_follows_up_then_farewell():
     svc, _ = _make_service()
     sid = svc.new_session()
     svc.start_question(sid)
@@ -142,8 +160,18 @@ def test_last_question_farewell():
     session = svc.sessions[sid]
     assert session.question_count == MAX_QUESTIONS
 
-    # 第 5 题认真回答 -> farewell 正常收尾
-    r = svc.answer(sid, "RAG 是检索增强生成，结合检索与生成")
+    # 第 5 题不再直接结束，而是像前 4 题一样追问
+    r = svc.answer(sid, "RAG 是检索增强生成")
+    assert r["finished"] is False
+    assert r["question_count"] == MAX_QUESTIONS  # 没换题
+    assert r["followup_count"] == 1              # 第 1 次追问
+
+    r = svc.answer(sid, "它结合了检索和生成两部分")
+    assert r["finished"] is False
+    assert r["followup_count"] == 2              # 第 2 次追问
+
+    # 追问满 2 次后再答 -> 告别收尾
+    r = svc.answer(sid, "总的来说就是这样")
     assert r["finished"] is True
     assert r["question_count"] == MAX_QUESTIONS
     session = svc.sessions[sid]
@@ -156,6 +184,20 @@ def test_looks_like_give_up():
     assert svc._looks_like_give_up("我不知道") is True
     assert svc._looks_like_give_up("这个真没学过") is True
     assert svc._looks_like_give_up("RAG 是检索增强生成") is False
+    # 含否定词但仍在尝试作答 -> 不算放弃
+    assert svc._looks_like_give_up("这个我不太清楚，但是我觉得应该是向量相似度") is False
+    assert svc._looks_like_give_up("不太懂，我猜是先把文本转成向量再检索") is False
+
+
+def test_uncertain_answer_not_give_up():
+    svc, _ = _make_service()
+    sid = svc.new_session()
+    svc.start_question(sid)
+    # 含否定词但仍在尝试作答 -> 应判定为"未放弃"，走追问而非换题
+    r = svc.answer(sid, "我不太清楚，但是我觉得应该是向量检索")
+    assert r["finished"] is False
+    assert r["question_count"] == 1  # 没换题
+    assert r["followup_count"] == 1  # 走追问
 
 
 def test_finish_parses_score_json():

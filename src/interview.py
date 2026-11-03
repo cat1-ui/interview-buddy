@@ -78,6 +78,28 @@ EVALUATE_AND_RESPOND_PROMPT = """你是一位技术面试官。候选人刚才�
 - 不要输出分析过程，直接输出你要对候选人说的话
 """
 
+# 追问/判断放弃合一的 prompt：一次调用同时产出 give_up 与回应
+EVALUATE_AND_RESPOND_V2_PROMPT = """你是一位技术面试官。候选人刚才回答了你的问题，请先判断他是否"明确表示答不下去"（放弃），再据此给出回应。
+
+面试题：{question}
+候选人回答：{answer}
+
+判断规则（重要）：
+- 只有候选人明确表示"不会 / 不知道 / 没学过 / 想不起来"，且没有继续尝试作答，give_up 才为 true。
+- 若候选人只是不确定、但仍在尝试作答（例如"我不太清楚，但是我觉得……"、"不太懂，我猜是……"），give_up 为 false。
+- 其余情况 give_up 一律为 false。
+
+按判断结果给出回应：
+- give_up=true：给一句很简短的安抚（比如"没关系，我们看下一题"），不要点评、不要评判，也不要自己出下一题（下一题由系统另出）。
+- give_up=false：候选人回答得浅或不完整，请针对薄弱点追问一个更深入的问题（只问一个最关键的问题）。
+
+请严格输出 JSON，格式：{{"give_up": true或false, "reply": "你对候选人说的话"}}
+
+要求：
+- reply 要自然、简短，像真人面试官说话
+- 不要输出分析过程，只输出上面的 JSON
+"""
+
 # 最终打分的 prompt
 SCORE_PROMPT = """你是一位技术面试官，面试已经结束。以下是完整的面试记录，请给候选人的表现打分。
 
@@ -298,18 +320,29 @@ class InterviewService:
 
     def _looks_like_give_up(self, answer_text):
         """
-        判断候选人是否"明确表示不知道/不会"。
-        命中这些词，就认为这道题答不下去了，停止追问、直接换题。
+        判断候选人是否"真的答不下去了"。
+        只有"明确表示不知道/不会，且没有继续尝试作答"才算放弃；
+        若是"我不太清楚，但是我觉得……"这类仍在尝试的回答，不算放弃。
         """
         keywords = [
             "不知道", "不清楚", "不会", "不懂", "不了解",
             "没学过", "没接触过", "没听说过", "想不起来", "没有接触",
         ]
         answer = answer_text.strip()
-        for kw in keywords:
-            if kw in answer:
-                return True
-        return False
+        # 没命中任何否定词，肯定没放弃
+        if not any(kw in answer for kw in keywords):
+            return False
+
+        # 命中了否定词，但后半句出现转折 / 尝试作答的信号，
+        # 说明候选人仍在尝试作答（比如"不太懂，不过我猜是……"），不算放弃。
+        attempt_markers = (
+            "但", "不过", "只是", "其实", "然而", "就是",
+            "我猜", "可能", "应该", "大概", "记得", "印象",
+        )
+        if any(mk in answer for mk in attempt_markers):
+            return False
+
+        return True
 
     def _respond(self, session, question, answer, mode):
         """
@@ -338,6 +371,42 @@ class InterviewService:
         except Exception as exc:
             _raise_llm_error(exc)
         return response.choices[0].message.content.strip()
+
+    def _respond_v2(self, question, answer):
+        """
+        一次调用同时完成两件事：
+            1. 判断候选人是否"真的放弃"（而非仍在尝试作答）
+            2. 据此生成回应（放弃=安抚，未放弃=追问）
+        返回 (give_up: bool, reply: str)；reply 为空表示解析失败，调用方需兜底。
+        """
+        prompt = EVALUATE_AND_RESPOND_V2_PROMPT.format(question=question, answer=answer)
+        try:
+            response = self.client.chat.completions.create(
+                model=DEEPSEEK_MODEL,
+                messages=[
+                    {"role": "system", "content": INTERVIEWER_SYSTEM},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.8,
+                response_format={"type": "json_object"},  # 强制输出 JSON，便于解析
+            )
+        except Exception as exc:
+            _raise_llm_error(exc)  # 网络/上游异常 -> 502
+
+        raw = response.choices[0].message.content.strip()
+        import json
+        try:
+            if raw.startswith("```"):
+                raw = raw.strip("`")
+                if raw.startswith("json"):
+                    raw = raw[4:]
+            data = json.loads(raw)
+            give_up = bool(data.get("give_up", False))
+            reply = (data.get("reply") or "").strip()
+            return give_up, reply
+        except Exception:
+            # JSON 解析失败 -> 回退到本地关键词规则；reply 置空由调用方兜底
+            return self._looks_like_give_up(answer), ""
 
     def _respond_stream(self, session, question, answer, mode):
         """
@@ -426,9 +495,9 @@ class InterviewService:
     def answer(self, session_id, answer_text):
         """
         候选人回答问题。按优先级判断：
-            判断1：是否说"不知道" -> 是则安抚后换题
-            判断2：本题是否已追问满 MAX_FOLLOWUPS 次 -> 是则换题提示
-            判断3：是否已满 MAX_QUESTIONS 题 -> 是则自动结束（告别话）
+            判断1：是否放弃（交由大模型一次判断并生成回应）
+            判断2：本题是否已追问满 MAX_FOLLOWUPS 次 -> 是则换题提示（最后一题则告别收尾）
+            判断3：否则追问（含最后一题，追问满后才收尾）
         返回 {"reply": 回应文本, "finished": 是否已结束}
         """
         session = self.sessions.get(session_id)
@@ -444,41 +513,39 @@ class InterviewService:
         # 是否已经是最后一道题（答完这道就该结束）
         is_last_question = session.question_count >= MAX_QUESTIONS
 
-        # ---- 判断1：说"不知道" -> 安抚（+换题或结束） ----
-        if self._looks_like_give_up(answer_text):
-            reply = self._respond(session, session.current_question, answer_text, "comfort")
-            self._append(session, "interviewer", reply)
-            # 已经是最后一题 -> 直接结束，不再换题
+        # ---- 判断1：是否放弃（交由大模型一次判断并生成回应） ----
+        give_up, reply = self._respond_v2(session.current_question, answer_text)
+        if give_up:
+            # 最后一题放弃 -> 直接告别收尾；否则安抚 + 换题
             if is_last_question:
+                reply = self._respond(session, session.current_question, answer_text, "farewell")
                 session.finished = True
                 session.completed = True
+                self._append(session, "interviewer", reply)
                 return self._answer_result(session, reply, True)
-            # 未满则出一道新题，和安抚语一起返回
+            if not reply:
+                reply = self._respond(session, session.current_question, answer_text, "comfort")
+            self._append(session, "interviewer", reply)
             next_question = self._generate_question(session)
             return self._answer_result(session, reply + "\n\n" + next_question, False)
 
-        # ---- 判断2：追问满 2 次 -> 换题提示（+换题或结束） ----
+        # ---- 判断2：追问满 MAX_FOLLOWUPS 次 -> 换题提示（最后一题则告别收尾） ----
         if session.followup_count >= MAX_FOLLOWUPS:
+            if is_last_question:
+                reply = self._respond(session, session.current_question, answer_text, "farewell")
+                session.finished = True
+                session.completed = True
+                self._append(session, "interviewer", reply)
+                return self._answer_result(session, reply, True)
             reply = self._respond(session, session.current_question, answer_text, "advance")
             self._append(session, "interviewer", reply)
-            if is_last_question:
-                session.finished = True
-                session.completed = True
-                return self._answer_result(session, reply, True)
             next_question = self._generate_question(session)
             return self._answer_result(session, reply + "\n\n" + next_question, False)
 
-        # ---- 判断3：不是最后一题，还能追问 -> 追问 ----
-        # （最后一题不会走到"追问"：若既没说不知道、追问也还没满，但已到最后一题，
-        #   则用告别话正常收尾结束，不再追问。）
-        if is_last_question:
-            reply = self._respond(session, session.current_question, answer_text, "farewell")
-            session.finished = True
-            session.completed = True
-            self._append(session, "interviewer", reply)
-            return self._answer_result(session, reply, True)
-
-        reply = self._respond(session, session.current_question, answer_text, "followup")
+        # ---- 追问（含最后一题） ----
+        if not reply:
+            # 模型没给出有效回应（JSON 解析兜底）-> 用 followup 台词
+            reply = self._respond(session, session.current_question, answer_text, "followup")
         session.followup_count += 1
         self._append(session, "interviewer", reply)
         return self._answer_result(session, reply, False)
@@ -487,10 +554,12 @@ class InterviewService:
         """
         answer 的流式版本。逐段 yield SSE 事件字符串：
             meta（先发，带 finished / question_count / followup_count）
-            -> 多个 delta（面试官回应文本，逐段）
+            -> 多个 delta（面试官回应文本）
             -> done
 
-        逻辑与 answer() 完全一致，只是"生成"这一步用流式。
+        判断逻辑与 answer() 一致；差异在于：
+        - 放弃/追问的回应由 _respond_v2 一次性生成，用整段 delta 输出（非打字机）；
+        - 告别、换题提示、出新题仍保持流式逐段输出。
         关键：meta 里的计数在发 meta 前就提前算好，保证前端状态条立即准确。
         """
         from src.streaming import meta_event, delta_event, done_event
@@ -506,39 +575,39 @@ class InterviewService:
 
         is_last_question = session.question_count >= MAX_QUESTIONS
 
-        # ---- 判断1：说"不知道" ----
-        if self._looks_like_give_up(answer_text):
+        # ---- 判断1：是否放弃（大模型一次判断；回应改为整段输出） ----
+        give_up, reply = self._respond_v2(session.current_question, answer_text)
+
+        if give_up:
             if is_last_question:
-                # 结束
-                finished = True
+                # 放弃 + 最后一题 -> 告别收尾
                 session.finished = True
                 session.completed = True
                 meta = {"finished": True, "question_count": session.question_count, "followup_count": session.followup_count}
                 yield meta_event(**meta)
                 reply_parts = []
-                for d in self._respond_stream(session, session.current_question, answer_text, "comfort"):
+                for d in self._respond_stream(session, session.current_question, answer_text, "farewell"):
                     reply_parts.append(d)
                     yield delta_event(d)
                 self._append(session, "interviewer", "".join(reply_parts).strip())
-            else:
-                # 安抚 + 换题
-                session.followup_count = 0  # 换题，追问归零
-                new_qc = session.question_count + 1
-                meta = {"finished": False, "question_count": new_qc, "followup_count": 0}
-                yield meta_event(**meta)
-                reply_parts = []
-                for d in self._respond_stream(session, session.current_question, answer_text, "comfort"):
-                    reply_parts.append(d)
-                    yield delta_event(d)
-                comfort_text = "".join(reply_parts).strip()
-                self._append(session, "interviewer", comfort_text)
-                yield delta_event("\n\n")
-                for d in self._generate_question_stream(session):
-                    yield delta_event(d)
+                yield done_event()
+                return
+            # 安抚 + 换题
+            if not reply:
+                reply = self._respond(session, session.current_question, answer_text, "comfort")
+            session.followup_count = 0
+            new_qc = session.question_count + 1
+            meta = {"finished": False, "question_count": new_qc, "followup_count": 0}
+            yield meta_event(**meta)
+            self._append(session, "interviewer", reply)
+            yield delta_event(reply)
+            yield delta_event("\n\n")
+            for d in self._generate_question_stream(session):
+                yield delta_event(d)
             yield done_event()
             return
 
-        # ---- 判断2：追问满 2 次 ----
+        # ---- 判断2：追问满 MAX_FOLLOWUPS 次 -> 换题提示（最后一题则告别收尾） ----
         if session.followup_count >= MAX_FOLLOWUPS:
             if is_last_question:
                 session.finished = True
@@ -546,51 +615,42 @@ class InterviewService:
                 meta = {"finished": True, "question_count": session.question_count, "followup_count": session.followup_count}
                 yield meta_event(**meta)
                 reply_parts = []
-                for d in self._respond_stream(session, session.current_question, answer_text, "advance"):
+                for d in self._respond_stream(session, session.current_question, answer_text, "farewell"):
                     reply_parts.append(d)
                     yield delta_event(d)
                 self._append(session, "interviewer", "".join(reply_parts).strip())
-            else:
-                session.followup_count = 0
-                new_qc = session.question_count + 1
-                meta = {"finished": False, "question_count": new_qc, "followup_count": 0}
-                yield meta_event(**meta)
-                reply_parts = []
-                for d in self._respond_stream(session, session.current_question, answer_text, "advance"):
-                    reply_parts.append(d)
-                    yield delta_event(d)
-                advance_text = "".join(reply_parts).strip()
-                self._append(session, "interviewer", advance_text)
-                yield delta_event("\n\n")
-                for d in self._generate_question_stream(session):
-                    yield delta_event(d)
-            yield done_event()
-            return
-
-        # ---- 判断3：最后一题 -> 告别；否则追问 ----
-        if is_last_question:
-            session.finished = True
-            session.completed = True
-            meta = {"finished": True, "question_count": session.question_count, "followup_count": session.followup_count}
+                yield done_event()
+                return
+            session.followup_count = 0
+            new_qc = session.question_count + 1
+            meta = {"finished": False, "question_count": new_qc, "followup_count": 0}
             yield meta_event(**meta)
             reply_parts = []
-            for d in self._respond_stream(session, session.current_question, answer_text, "farewell"):
+            for d in self._respond_stream(session, session.current_question, answer_text, "advance"):
                 reply_parts.append(d)
                 yield delta_event(d)
-            self._append(session, "interviewer", "".join(reply_parts).strip())
+            advance_text = "".join(reply_parts).strip()
+            self._append(session, "interviewer", advance_text)
+            yield delta_event("\n\n")
+            for d in self._generate_question_stream(session):
+                yield delta_event(d)
             yield done_event()
             return
 
-        # 追问
+        # ---- 追问（含最后一题） ----
         new_fc = session.followup_count + 1
         meta = {"finished": False, "question_count": session.question_count, "followup_count": new_fc}
         yield meta_event(**meta)
-        reply_parts = []
-        for d in self._respond_stream(session, session.current_question, answer_text, "followup"):
-            reply_parts.append(d)
-            yield delta_event(d)
         session.followup_count = new_fc
-        self._append(session, "interviewer", "".join(reply_parts).strip())
+        if not reply:
+            reply_parts = []
+            for d in self._respond_stream(session, session.current_question, answer_text, "followup"):
+                reply_parts.append(d)
+                yield delta_event(d)
+            reply = "".join(reply_parts).strip()
+        else:
+            yield delta_event(reply)
+        self._append(session, "interviewer", reply)
         yield done_event()
 
     def collect_question(self, session_id, index=None, category=""):
