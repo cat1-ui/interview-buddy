@@ -408,6 +408,9 @@ async def upload_docs(files: list[UploadFile] = File(...)):
         # 格式校验（严格小写后缀）
         if not filename.endswith(ALLOWED_SUFFIXES):
             raise HTTPException(status_code=400, detail=f"文件 {filename} 格式不支持，只允许 .md 和 .txt")
+        # 安全校验：只允许纯文件名，防路径穿越
+        if filename != Path(filename).name or ".." in filename or "/" in filename or "\\" in filename:
+            raise HTTPException(status_code=400, detail="非法的文件名")
         # 重名校验
         dest = DOCS_DIR / filename
         if dest.exists():
