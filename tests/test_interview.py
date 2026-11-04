@@ -8,6 +8,8 @@ import math
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.vector_store import VectorStore
@@ -254,6 +256,52 @@ def test_question_generation_requires_knowledge_base():
         assert "知识库为空" in exc.detail
     else:
         raise AssertionError("空库时应抛出 400 错误")
+
+
+def test_finish_is_idempotent():
+    """同一场面试重复 finish 只打一次分：否则同一份记录会出现两个总分。"""
+    svc, client = _make_service()
+    sid = svc.new_session()
+    svc.start_question(sid)
+    svc.answer(sid, "RAG 是检索增强生成")
+
+    first = svc.finish(sid)
+    second = svc.finish(sid)
+
+    assert first == second
+    score_calls = [
+        call for call in client.chat.completions.calls
+        if "JSON 格式" in " ".join(m["content"] for m in call["messages"])
+    ]
+    assert len(score_calls) == 1
+
+
+def test_finish_can_retry_after_scoring_failure():
+    """打分失败时不能把"已结束但没分数"锁死：再调一次应该能重新打分。"""
+    svc, client = _make_service()
+    sid = svc.new_session()
+    svc.start_question(sid)
+
+    real_create = client.chat.completions.create
+    state = {"failed": False}
+
+    def flaky(**kwargs):
+        text = " ".join(m["content"] for m in kwargs["messages"])
+        if "JSON 格式" in text and not state["failed"]:
+            state["failed"] = True
+            raise RuntimeError("上游超时")
+        return real_create(**kwargs)
+
+    client.chat.completions.create = flaky
+
+    with pytest.raises(Exception) as exc:
+        svc.finish(sid)
+    assert getattr(exc.value, "status_code", None) == 502
+    assert svc.sessions[sid].score is None  # 失败不缓存
+
+    score = svc.finish(sid)  # 重试成功
+    assert score["准确性"] == 8
+    assert svc.sessions[sid].score == score
 
 
 def test_ensure_can_answer_guards_stream_before_it_starts():

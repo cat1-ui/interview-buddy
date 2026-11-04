@@ -206,6 +206,7 @@ class InterviewSession:
         # 指定了方向、但方向内资料不足导致退化为随机出题时置 True。
         # 为什么要暴露：界面挂着「RAG」标签却在问 LangChain 工具，用户会以为是自己选错了。
         self.topic_fallback = False
+        self.score = None      # 已生成的打分结果（幂等：重复 finish 直接返回，不重算）
         self.last_active = None  # 最近一次活动时间（用于过期清理）
 
     def touch(self):
@@ -815,12 +816,23 @@ class InterviewService:
         }
 
     def finish(self, session_id):
-        """结束面试，生成打分报告"""
+        """
+        结束面试，生成打分报告。
+
+        幂等：同一场面试重复调用只打一次分，第二次直接返回缓存结果。
+        为什么必须幂等：前端复盘页在 sessionStorage 里拿不到分数时会补调一次
+        （ReviewPage.tsx），换个标签页打开复盘就会命中 —— 同一份记录打两次分，
+        既多花钱，又会给出两个不同的总分，用户会认为这个分数是随便给的。
+        """
         session = self.sessions.get(session_id)
         if not session:
             raise HTTPException(status_code=404, detail="面试会话不存在")
 
         session.touch()  # 打分也是活动，保证刚打完分的会话不会被立刻回收
+
+        if session.score is not None:
+            return session.score
+
         session.finished = True
 
         # 把历史拼成文本
@@ -876,6 +888,9 @@ class InterviewService:
             if is_incomplete:
                 score["不完整面试"] = True
 
+            # 只有成功解析才缓存：解析失败（兜底的 {"总评": raw}）不缓存，
+            # 这样用户再点一次还有机会拿到结构化分数。
+            session.score = score
             return score
         except Exception:
             return {"总评": raw}
