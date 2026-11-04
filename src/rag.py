@@ -12,7 +12,7 @@
 from fastapi import HTTPException
 from openai import OpenAI
 
-from src.config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL
+from src.config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, SIMILARITY_THRESHOLD
 from src import embedding
 from src.vector_store import VectorStore
 
@@ -33,6 +33,10 @@ RAG_PROMPT = """请根据以下资料回答用户的问题。
 
 
 class RagService:
+    # 两种"没内容"要分开说：用户才知道该去上传资料，还是该换个问法
+    EMPTY_STORE_HINT = "知识库为空，请先导入资料。"
+    NO_RELEVANT_HINT = "资料里没有找到相关内容。"
+
     def __init__(self, vector_store: VectorStore, client=None):
         self.vector_store = vector_store
         # client 可注入（测试传 fake）；未注入时才真正创建 OpenAI 客户端
@@ -42,6 +46,29 @@ class RagService:
             timeout=60.0,  # 请求超时，防止上游挂起导致请求卡死
         )
 
+    def _retrieve(self, question):
+        """
+        检索 + 相关度过滤。返回 (results, notice)：
+            results: 通过相似度阈值的片段（按相似度降序）
+            notice:  非空字符串表示没有可用内容，调用方直接把它返回给用户
+
+        为什么抽成一个方法：ask 与 ask_stream 必须用同一套检索口径。
+        之前阈值只加在了出题路径（interview.py），问答路径漏了 ——
+        同一份检索、两套标准，是最容易漏改的地方。
+        """
+        if self.vector_store.count == 0:
+            # 空库不必浪费一次 embedding 调用
+            return [], self.EMPTY_STORE_HINT
+
+        query_vector = embedding.embed_text(question)
+        results = [
+            r for r in self.vector_store.search(query_vector)
+            if r["score"] >= SIMILARITY_THRESHOLD
+        ]
+        if not results:
+            return [], self.NO_RELEVANT_HINT
+        return results, ""
+
     def ask(self, question):
         """
         完整 RAG 流程：检索 + 生成。
@@ -49,14 +76,10 @@ class RagService:
             answer_text: 生成的回答
             sources: 检索到的来源列表 [{"filename", "score", "content"}]
         """
-        # 1. 问题变向量
-        query_vector = embedding.embed_text(question)
-
-        # 2. 检索最相关的段落
-        results = self.vector_store.search(query_vector)
-
-        if not results:
-            return "知识库为空或没有相关内容，请先导入资料。", []
+        # 1-2. 检索 + 相关度过滤（与流式版共用同一口径，避免两套标准）
+        results, notice = self._retrieve(question)
+        if notice:
+            return notice, []
 
         # 3. 把检索到的段落拼成"上下文"
         context = "\n\n".join(
@@ -92,21 +115,25 @@ class RagService:
         """
         from src.streaming import meta_event, delta_event, done_event, error_event
 
-        # 1. 问题变向量 + 检索（这部分不是流式，先一次做完）
-        query_vector = embedding.embed_text(question)
-        results = self.vector_store.search(query_vector)
+        # 1-2. 检索 + 相关度过滤（这部分不是流式，先一次做完）
+        # 注意：这里已是生成器，抛异常会变成"200 + 断流"，所以把错误转成 error 事件发出去
+        try:
+            results, notice = self._retrieve(question)
+        except HTTPException as exc:
+            yield error_event(str(exc.detail))
+            return
+
+        if notice:
+            # 空库 / 没有相关内容：发 meta + 一句提示 + done，不调模型
+            yield meta_event(sources=[])
+            yield delta_event(notice)
+            yield done_event()
+            return
 
         sources = [
             {"filename": r["filename"], "score": r["score"]}
             for r in results
         ]
-
-        if not results:
-            # 知识库为空：直接发 meta + 一句提示 + done，不调模型
-            yield meta_event(sources=[])
-            yield delta_event("知识库为空或没有相关内容，请先导入资料。")
-            yield done_event()
-            return
 
         # 先发 meta（带 sources）
         yield meta_event(sources=sources)
