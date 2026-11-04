@@ -388,6 +388,22 @@ def test_topic_falls_back_and_flags_when_no_material():
     assert svc.get_review(sid)["topic_fallback"] is True
 
 
+def test_generate_prompt_marks_fragments_as_reference():
+    """回归：模型曾把参考资料当成候选人的话，开场就问"你提到 RAG 经常需要……"。
+
+    候选人此时一个字都还没答，这是 prompt 没区分"参考材料"和"候选人发言"。
+    """
+    svc, client = _make_service()
+    session = svc.sessions[svc.new_session(topic="RAG")]
+
+    svc._generate_question(session)
+
+    prompt = " ".join(
+        m["content"] for call in client.chat.completions.calls for m in call["messages"]
+    )
+    assert "不是候选人的发言" in prompt
+
+
 def test_generate_prompt_lists_asked_questions():
     """第二题起，prompt 里必须带着"已问过的题"，否则同一个知识点会被换个说法再问一遍。"""
     svc, client = _make_service()

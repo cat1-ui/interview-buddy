@@ -67,6 +67,8 @@ GENERATE_QUESTION_PROMPT = """你是一位技术面试官，请出一道 AI 应�
 2. 只考片段里有的内容，不要引入片段之外的知识点
 3. 只输出题目本身，不要解释，不要加"面试官说"之类的前缀
 4. 如果下面列出了"本场已问过的题"，新题必须落在不同知识点上，不要换个说法重复
+5. 【知识点片段】是你的参考资料，**不是候选人的发言**；候选人此时一个字都还没回答，
+   题目里不要出现"你提到""你刚才说""你说过"这类措辞
 
 {extra_context}{asked_block}"""
 
@@ -321,8 +323,8 @@ class InterviewService:
                     self._mark_used(session, related)
                     return (
                         f"面试方向是「{session.topic}」，请严格围绕这个方向出题。"
-                        "以下是知识库里与该方向最相关的内容，请基于这些内容出题：\n"
-                        + points_text
+                        "以下是知识库里与该方向最相关的内容（参考资料，不是候选人的发言），"
+                        "请基于这些内容出题：\n" + points_text
                     ), points_text
 
             # 走到这里说明方向内真的没素材了（最高分都不到绝对下限）。
@@ -344,8 +346,8 @@ class InterviewService:
             points_text = "\n\n".join(context_lines)
             self._mark_used(session, samples)
             return (
-                "以下是候选人知识库里的一些内容，请围绕这些内容出题（考察候选人对这些知识的掌握）：\n"
-                + points_text
+                "以下是候选人知识库里的一些内容（参考资料，不是候选人的发言），"
+                "请围绕这些内容出题（考察候选人对这些知识的掌握）：\n" + points_text
             ), points_text
         return "", ""
 
