@@ -81,14 +81,21 @@ python3.11 -m venv .venv
 # macOS / Linux:
 source .venv/bin/activate
 
-# 安装依赖
-pip install -r requirements.txt
+# 安装依赖（二选一）
+pip install -r requirements.txt    # 按兼容范围装，会拿到较新的版本
+pip install -r requirements.lock   # 装成开发时验证过的确切版本，推荐用于复现
 
 # 启动（默认 http://localhost:8000）
 uvicorn main:app --reload
 ```
 
 启动后可访问 http://localhost:8000/docs 查看接口文档。
+
+> **为什么有两个依赖文件**：`requirements.txt` 声明"允许的版本范围"（意图），
+> `requirements.lock` 记录"实际验证过的那棵依赖树"（含 starlette / pydantic 这类传递依赖）。
+> 需要锁的原因很具体：`openai>=1.0.0` 实际会装到 3.x、`fastapi>=0.110` 会装到 0.16x，
+> 上游 API 变一次就是一连串 `TypeError`。lock 文件已在全新虚拟环境里验证过 ——
+> 只装它、62 个测试全部通过。
 
 ### 3. 启动前端
 
