@@ -12,7 +12,13 @@
 from fastapi import HTTPException
 from openai import OpenAI
 
-from src.config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, SIMILARITY_THRESHOLD
+from src.config import (
+    DEEPSEEK_API_KEY,
+    DEEPSEEK_BASE_URL,
+    DEEPSEEK_MODEL,
+    RAG_MIN_SCORE,
+    RAG_SCORE_RATIO,
+)
 from src import embedding
 from src.vector_store import VectorStore
 
@@ -55,16 +61,25 @@ class RagService:
         为什么抽成一个方法：ask 与 ask_stream 必须用同一套检索口径。
         之前阈值只加在了出题路径（interview.py），问答路径漏了 ——
         同一份检索、两套标准，是最容易漏改的地方。
+
+        门槛分两层（依据见 config.RAG_MIN_SCORE 的注释）：
+            - 绝对低水位：挡掉"明显无关"（红烧肉 0.236、股市 0.240 这类）
+            - 相对水位：top1 分数 × 比例，决定喂几段给模型
+        "资料里到底有没有答案"交给模型判断，不再靠一个绝对分数 ——
+        因为实测相关与无关在 0.47 附近完全重叠，阈值没有区分度。
         """
         if self.vector_store.count == 0:
             # 空库不必浪费一次 embedding 调用
             return [], self.EMPTY_STORE_HINT
 
         query_vector = embedding.embed_text(question)
-        results = [
-            r for r in self.vector_store.search(query_vector)
-            if r["score"] >= SIMILARITY_THRESHOLD
-        ]
+        results = self.vector_store.search(query_vector)
+
+        if not results or results[0]["score"] < RAG_MIN_SCORE:
+            return [], self.NO_RELEVANT_HINT
+
+        cutoff = max(RAG_MIN_SCORE, results[0]["score"] * RAG_SCORE_RATIO)
+        results = [r for r in results if r["score"] >= cutoff]
         if not results:
             return [], self.NO_RELEVANT_HINT
         return results, ""

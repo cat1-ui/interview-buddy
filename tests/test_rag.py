@@ -4,6 +4,8 @@ RagService.ask 的单元测试。
 用 fake embedding + fake client，验证 prompt 拼接与返回、空库分支。
 """
 
+import json
+import math
 import sys
 from pathlib import Path
 
@@ -122,6 +124,30 @@ def test_ask_filters_out_low_similarity_sources(monkeypatch):
     prompt = client.chat.completions.calls[0]["messages"][0]["content"]
     assert "RAG 是检索增强生成" in prompt
     assert "适合出门散步" not in prompt  # 无关片段被挡在 prompt 之外
+
+
+def test_ask_keeps_all_chunks_above_relative_cutoff(monkeypatch):
+    """回归：0.48 这种绝对值会让正常问题只喂 1 段（实测「什么是 RAG？」top1=0.480）。
+
+    分层之后：top1 高于低水位 0.30，相对门槛 0.480×0.75=0.36，四段都该保留。
+    """
+
+    def _vec(cos):
+        return [cos, math.sqrt(max(0.0, 1 - cos * cos))]
+
+    vs = VectorStore()
+    scores = [0.48, 0.41, 0.41, 0.40]
+    vs.add(
+        texts=[f"片段{i}" for i in range(4)],
+        metadatas=[{"filename": "kb.md"} for _ in range(4)],
+        vectors=[_vec(s) for s in scores],
+    )
+    svc = RagService(vs, client=FakeClient())
+    monkeypatch.setattr(embedding_mod, "embed_text", lambda text: [1.0, 0.0])
+
+    _, sources = svc.ask("什么是 RAG？")
+
+    assert len(sources) == 4
 
 
 def test_ask_returns_hint_when_nothing_passes_threshold(monkeypatch):
