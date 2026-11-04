@@ -13,8 +13,6 @@
 """
 
 from contextlib import asynccontextmanager
-from pathlib import Path
-import os
 import threading
 import asyncio
 
@@ -24,11 +22,12 @@ from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 
 from src.config import CORS_ORIGINS, DEEPSEEK_API_KEY, ZHIPU_API_KEY, DOCS_DIR
-from src.document_loader import build_chunks, split_text
+from src.document_loader import build_chunks, split_text, safe_doc_filename, ALLOWED_SUFFIXES
 from src import embedding
 from src import bank
 from src import tts
 from src.vector_store import VectorStore
+from src.streaming import guard_events
 from src.rag import RagService
 from src.interview import InterviewService
 
@@ -84,33 +83,28 @@ class AskResponse(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "chunk_count": vector_store.count}
+    return {
+        "status": "ok",
+        "chunk_count": vector_store.count,
+        # 构建中（启动时自动重建 / 手动 /build）：前端可据此提前提示，而不是等用户撞 503
+        "building": vector_store.building,
+    }
 
 
 @app.post("/build", response_model=BuildResponse)
 def build_knowledge_base():
     """
     构建知识库：扫描 data/docs 目录，读文档、切分、向量化、存入内存。
+
+    统一走 _rebuild_knowledge_base()，不要在这里再内联一份：
+    内联版会漏掉 building 标志（重建期间出题拦不住），
+    而且和上传的增量写入抢同一份 list —— clear 与 add 之间进来的数据会被静默清掉。
     """
-    # 1. 读文档 + 切分
-    chunks = build_chunks()
-    if not chunks:
-        return BuildResponse(status="empty", chunk_count=0)
-
-    # 2. 提取文本和元数据
-    texts = [c["content"] for c in chunks]
-    metadatas = [{"filename": c["filename"]} for c in chunks]
-
-    # 3. 向量化
-    vectors = embedding.embed_texts(texts)
-
-    # 4. 存入向量库（先清空旧的，再写入新的）
-    #    全程复用同一个 vector_store 实例，rag_service / interview_service 持有的是它的引用，
-    #    清空再写入后，它们看到的也是新数据，无需重建引用。
-    vector_store.clear()
-    vector_store.add(texts, metadatas, vectors)
-
-    return BuildResponse(status="success", chunk_count=vector_store.count)
+    chunk_count = _rebuild_knowledge_base()
+    return BuildResponse(
+        status="success" if chunk_count else "empty",
+        chunk_count=chunk_count,
+    )
 
 
 @app.post("/ask", response_model=AskResponse)
@@ -128,7 +122,7 @@ def ask_stream(req: AskRequest):
     知识库问答（流式）：返回 SSE 流，事件格式 meta/delta/done。
     """
     return StreamingResponse(
-        rag_service.ask_stream(req.question),
+        guard_events(rag_service.ask_stream(req.question)),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
@@ -198,8 +192,11 @@ def interview_answer_stream(req: AnswerRequest):
     候选人回答问题（流式）：返回 SSE 流，事件格式 meta/delta/done。
     meta 里带 finished / question_count / followup_count。
     """
+    # 会话不存在 / 已结束这类校验必须在开始推流之前做完：
+    # 一旦 SSE 开始发送，就只能给 200，状态码改不了了。
+    interview_service.ensure_can_answer(req.session_id)
     return StreamingResponse(
-        interview_service.answer_stream(req.session_id, req.answer),
+        guard_events(interview_service.answer_stream(req.session_id, req.answer)),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
@@ -338,7 +335,7 @@ def bank_update_category(qid: int, req: UpdateCategoryRequest):
 # 上传限制
 MAX_UPLOAD_COUNT = 3       # 一次最多上传几个文件
 MAX_UPLOAD_SIZE = 5 * 1024 * 1024  # 单文件最大 5MB
-ALLOWED_SUFFIXES = (".md", ".txt")  # 只允许这两个后缀（严格小写）
+# 允许的格式白名单在 src.document_loader.ALLOWED_SUFFIXES（与文件名校验放在一起）
 
 
 def _rebuild_knowledge_base():
@@ -398,34 +395,43 @@ def _auto_build_on_startup():
 @app.post("/upload")
 async def upload_docs(files: list[UploadFile] = File(...)):
     """
-    上传资料文件（.md / .txt），存到 data/docs，并自动重新构建知识库。
+    上传资料文件（.md / .txt），存到 data/docs，并增量写入向量库（不全量重建）。
     限制：一次最多 3 个，单文件 5MB，只允许 .md/.txt，同名拒绝。
+    语义：全成功或全失败 —— 任一文件校验或向量化失败，本次一个文件都不落盘。
     """
     # 1. 数量校验
     if len(files) > MAX_UPLOAD_COUNT:
         raise HTTPException(status_code=400, detail=f"一次最多上传 {MAX_UPLOAD_COUNT} 个文件")
 
-    # 2. 逐个校验并保存
+    # 上传是"全成功或全失败"：
+    #   先把所有文件校验完、再全部向量化、最后才统一落盘入库。
+    #   这样任何一个文件不合法（格式/超限/为空），都不会留下"传了一半"的残局
+    #   ——以前是边校验边写盘，第 2 个文件报错时第 1 个已经写进去了，
+    #     用户看到失败、重传又撞 409，只能手动去删。
     DOCS_DIR.mkdir(parents=True, exist_ok=True)
-    saved = []
-    for f in files:
-        filename = f.filename or ""
-        # 格式校验（严格小写后缀）
-        if not filename.endswith(ALLOWED_SUFFIXES):
-            raise HTTPException(status_code=400, detail=f"文件 {filename} 格式不支持，只允许 .md 和 .txt")
-        # 安全校验：只允许纯文件名，防路径穿越
-        if filename != Path(filename).name or ".." in filename or "/" in filename or "\\" in filename:
-            raise HTTPException(status_code=400, detail="非法的文件名")
-        # 重名校验
-        dest = DOCS_DIR / filename
-        if dest.exists():
-            raise HTTPException(status_code=409, detail=f"已存在同名文件：{filename}")
 
-        # 边接收边计数，超过 5MB 立即中断
+    # ---- 阶段一：校验文件名（格式 / 路径穿越 / 重名 / 本次请求内重名）----
+    seen = set()
+    names = []
+    for f in files:
+        # 格式 + 路径穿越校验，与删除接口共用同一套规则
+        try:
+            filename = safe_doc_filename(f.filename)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        # 重名校验：已存在，或本次请求里重复
+        if (DOCS_DIR / filename).exists() or filename in seen:
+            raise HTTPException(status_code=409, detail=f"已存在同名文件：{filename}")
+        seen.add(filename)
+        names.append(filename)
+
+    # ---- 阶段二：读取 + 大小校验 + 切分（全程不落盘）----
+    payloads = []  # [(filename, content(bytes), chunks(list[str]))]
+    for f, filename in zip(files, names):
         size = 0
         chunks_bytes = []
         while True:
-            chunk = await f.read(1024 * 64)  # 每次读 64KB
+            chunk = await f.read(1024 * 64)  # 每次读 64KB，边收边计数
             if not chunk:
                 break
             size += len(chunk)
@@ -434,18 +440,24 @@ async def upload_docs(files: list[UploadFile] = File(...)):
                 raise HTTPException(status_code=413, detail=f"文件 {filename} 超过 5MB 限制")
             chunks_bytes.append(chunk)
         await f.close()
-        content = b"".join(chunks_bytes)
 
-        # 切分 + 向量化（只处理这一个文件，增量索引；放入线程池避免阻塞事件循环）
-        text = content.decode("utf-8", errors="ignore")
-        chunks = split_text(text)
+        content = b"".join(chunks_bytes)
+        chunks = split_text(content.decode("utf-8", errors="ignore"))
         if not chunks:
             raise HTTPException(status_code=400, detail=f"文件 {filename} 内容为空")
-        # 先 embed 成功才落盘：失败则抛异常、文件未写入，可重传，
-        # 避免"文件已落盘但索引没建成"的半残状态（重传会撞 409）。
-        vectors = await asyncio.to_thread(embedding.embed_texts, chunks)
+        payloads.append((filename, content, chunks))
 
-        dest.write_bytes(content)
+    # ---- 阶段三：全部向量化（任一失败 -> 整体失败，此时磁盘上还没有任何新文件）----
+    vectorized = []
+    for filename, content, chunks in payloads:
+        # 放线程池：embedding 是同步 HTTP 请求，直接在事件循环里跑会卡住所有请求
+        vectors = await asyncio.to_thread(embedding.embed_texts, chunks)
+        vectorized.append((filename, content, chunks, vectors))
+
+    # ---- 阶段四：落盘 + 增量入库 ----
+    saved = []
+    for filename, content, chunks, vectors in vectorized:
+        (DOCS_DIR / filename).write_bytes(content)
         vector_store.add(chunks, [{"filename": filename}] * len(chunks), vectors)
         saved.append(filename)
 
@@ -477,9 +489,11 @@ def delete_doc(filename: str):
     """
     删除一个资料文件，并自动重新构建知识库。
     """
-    # 安全校验：只允许纯文件名，防路径穿越
-    if filename != Path(filename).name or ".." in filename:
-        raise HTTPException(status_code=400, detail="非法的文件名")
+    # 安全校验：与上传共用同一套规则（纯文件名、无 ..、后缀白名单）
+    try:
+        filename = safe_doc_filename(filename)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
     dest = DOCS_DIR / filename
     if not dest.exists() or not dest.is_file():

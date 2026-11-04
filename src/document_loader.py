@@ -16,6 +16,32 @@ from pathlib import Path
 
 from src.config import DOCS_DIR, CHUNK_SIZE, CHUNK_OVERLAP
 
+# 允许上传/管理的资料格式。
+# 严格小写：.MD / .TXT 一律拒绝，否则 Windows 上 "a.md" 和 "a.MD" 会互相覆盖，重名校验形同虚设。
+ALLOWED_SUFFIXES = (".md", ".txt")
+
+
+def safe_doc_filename(name):
+    """
+    校验并返回一个安全的资料文件名。上传和删除共用这一套规则。
+
+    拒绝：空名、含目录分隔符（/ 或 \\）、含 ..、不是纯文件名、后缀不在白名单。
+
+    为什么单独成函数：以前上传和删除各写一套校验，标准还不一样
+    （删除查了 ..，上传一开始没查）。安全校验只要有两份实现，
+    迟早会只修一处 —— 放成一处，改规则就不存在"漏改"。
+
+    不合法时抛 ValueError，由调用方翻译成 HTTP 400。
+    """
+    raw = (name or "").strip()
+    if not raw:
+        raise ValueError("文件名为空")
+    if "/" in raw or "\\" in raw or ".." in raw or Path(raw).name != raw:
+        raise ValueError("非法的文件名")
+    if Path(raw).suffix not in ALLOWED_SUFFIXES:
+        raise ValueError("只允许 .md 和 .txt 文件")
+    return raw
+
 
 def load_documents(docs_dir=None):
     """

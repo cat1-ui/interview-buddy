@@ -7,10 +7,12 @@ document_loader.split_text 的单元测试。
 import sys
 from pathlib import Path
 
+import pytest
+
 # 让测试能 import src 包
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.document_loader import split_text
+from src.document_loader import safe_doc_filename, split_text
 
 
 def test_empty_text_returns_empty_list():
@@ -66,3 +68,24 @@ def test_no_overlap_clean_split():
     text = "abcdefgh"
     chunks = split_text(text, chunk_size=3, overlap=0)
     assert chunks == ["abc", "def", "gh"]
+
+
+# ============ 文件名校验（上传 / 删除共用） ============
+
+def test_safe_filename_accepts_plain_names():
+    assert safe_doc_filename("a.md") == "a.md"
+    assert safe_doc_filename("RAG 笔记.txt") == "RAG 笔记.txt"
+    assert safe_doc_filename("  a.md  ") == "a.md"  # 前后空白被裁掉
+
+
+def test_safe_filename_rejects_path_traversal():
+    for bad in ["../a.md", "../../evil.md", "sub/a.md", "sub\\a.md", "..\\evil.md", "a/../../b.md"]:
+        with pytest.raises(ValueError):
+            safe_doc_filename(bad)
+
+
+def test_safe_filename_rejects_bad_suffix():
+    # .MD 也算不合法：大小写不同会在 Windows 上绕开重名校验（a.md / a.MD 互相覆盖）
+    for bad in ["a.exe", "a.md.exe", "a", "a.MD", ".md", ""]:
+        with pytest.raises(ValueError):
+            safe_doc_filename(bad)
