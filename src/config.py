@@ -52,9 +52,27 @@ CHUNK_OVERLAP = 30
 TOP_K = 4
 # embedding 批量请求时，每批最多多少段
 EMBED_BATCH_SIZE = 32
-# 检索相似度阈值：top1 分数低于此值的片段会被过滤，视为"与该方向无关"。
-# 依据 eval/dump_similarity_scores.py 对真实资料（data/docs）的实测分布：
-#   资料内主题 top1 分数 0.51~0.63（最低 0.5058）
-#   资料外主题 top1 分数 0.28~0.47（最高 0.4711）
-# 两组之间有清晰间隙，取 0.48：滤掉无关片段、又不误伤相关片段。
+# 并发请求几批（实测单批约 1.1s，主要是模型推理时间；串行 14 批 = 15.6s）
+# 别开太高：智谱对并发有限制，撞 429 反而更慢
+EMBED_MAX_WORKERS = int(os.getenv("EMBED_MAX_WORKERS", "4"))
+# 失败重试次数（指数退避 1s / 2s / 4s）。额度不足(1113)不重试，直接报错
+EMBED_MAX_RETRIES = int(os.getenv("EMBED_MAX_RETRIES", "3"))
+# 向量磁盘缓存：按 sha256(模型|文本) 复用已算过的向量，
+# 重启 / --reload / 调参实验都不会重复调用 embedding
+EMBED_CACHE_PATH = DATA_DIR / "embedding_cache.npz"
+# 检索相似度阈值（问答路径用）：top1 分数低于此值的片段会被过滤，视为"与该方向无关"。
+# 注意：这个绝对值只用在"资料里有没有相关内容"的判断上（rag.ask）。
+# 出题的方向检索不要用它 —— 见下面 TOPIC_MIN_SCORE 的说明。
 SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", "0.48"))
+
+# 出题方向检索的门槛（相对门槛，不是绝对值）。
+# 踩过的坑：原来直接用 SIMILARITY_THRESHOLD=0.48 当方向内过滤条件，
+# 那个值是对旧语料（7 篇 / 640 段）测出来的；删掉两篇资料后「RAG」方向
+# top1 只有 0.525、top2 就掉到 0.457，于是每次只放出 1 个片段，
+# 第 2 题起候选全被滤空，只能静默退化成"全库随机出题" —— 方向形同虚设。
+# 现在分成两层：
+#   TOPIC_MIN_SCORE   : 绝对下限。低于它才判定"这个方向没资料"，才算降级
+#   TOPIC_SCORE_RATIO : 相对门槛。方向内取 top1 分数的这个比例当及格线，
+#                       跟着当前语料的实际分布走，换语料不需要重新调参
+TOPIC_MIN_SCORE = float(os.getenv("TOPIC_MIN_SCORE", "0.30"))
+TOPIC_SCORE_RATIO = float(os.getenv("TOPIC_SCORE_RATIO", "0.7"))
