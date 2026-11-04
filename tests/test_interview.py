@@ -4,6 +4,7 @@ InterviewService 的单元测试。
 用 fake client + fake embed_fn 验证面试状态机，不触网、不真实调用模型。
 """
 
+import math
 import sys
 from pathlib import Path
 
@@ -337,6 +338,54 @@ def test_context_falls_back_when_corpus_exhausted():
         extra_context, points_text = svc._build_question_context(session)
         assert extra_context
         assert points_text
+
+
+def _vec(cos):
+    """造一个与查询向量 [1,0] 余弦相似度恰好为 cos 的二维向量。"""
+    return [cos, math.sqrt(max(0.0, 1 - cos * cos))]
+
+
+def test_topic_keeps_fragments_below_old_absolute_threshold():
+    """回归：写死的绝对阈值(0.48)会随语料变化失效。
+
+    方向内 top1=0.52、top2=0.45、top3=0.41，全都低于旧的 0.48 ——
+    但相对门槛 0.52×0.7=0.364 应该把这三段都放进来，不该退化成随机。
+    """
+    vs = VectorStore()
+    scores = [0.52, 0.45, 0.41]
+    vs.add(
+        texts=[f"片段{i}" for i in range(3)],
+        metadatas=[{"filename": "kb.md"} for _ in range(3)],
+        vectors=[_vec(s) for s in scores],
+    )
+    svc = InterviewService(_FakeRag(vs), client=FakeClient(), embed_fn=lambda t: [1.0, 0.0])
+    session = svc.sessions[svc.new_session(topic="RAG")]
+
+    _, points_text = svc._build_question_context(session)
+
+    assert points_text.count("【知识点片段】") == 3
+    assert session.topic_fallback is False
+
+
+def test_topic_falls_back_and_flags_when_no_material():
+    """方向内最高分连绝对下限(0.30)都不到：才允许退化，并且必须留下标记。"""
+    vs = VectorStore()
+    vs.add(
+        texts=["完全无关的内容A", "完全无关的内容B"],
+        metadatas=[{"filename": "kb.md"}, {"filename": "kb.md"}],
+        vectors=[_vec(0.20), _vec(0.15)],
+    )
+    svc = InterviewService(_FakeRag(vs), client=FakeClient(), embed_fn=lambda t: [1.0, 0.0])
+    sid = svc.new_session(topic="量子力学")
+    session = svc.sessions[sid]
+
+    _, points_text = svc._build_question_context(session)
+
+    assert points_text  # 仍能出题（退化为随机）
+    assert session.topic_fallback is True
+    # 前端需要能读到这个标记，否则界面还挂着方向标签
+    assert svc.get_session_info(sid)["topic_fallback"] is True
+    assert svc.get_review(sid)["topic_fallback"] is True
 
 
 def test_generate_prompt_lists_asked_questions():

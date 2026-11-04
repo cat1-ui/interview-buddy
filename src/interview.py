@@ -12,11 +12,21 @@
     知识库（RAG 检索）+ 通用知识，混合出题
 """
 
+import logging
+
 from fastapi import HTTPException
 from openai import OpenAI
 
-from src.config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, SIMILARITY_THRESHOLD
+from src.config import (
+    DEEPSEEK_API_KEY,
+    DEEPSEEK_BASE_URL,
+    DEEPSEEK_MODEL,
+    TOPIC_MIN_SCORE,
+    TOPIC_SCORE_RATIO,
+)
 from src.rag import RagService
+
+logger = logging.getLogger("uvicorn.error")
 
 
 def _raise_llm_error(exc):
@@ -191,6 +201,9 @@ class InterviewSession:
         self.followup_count = 0  # 当前题目已追问的次数
         self.topic = None      # 面试方向（如"RAG"），None 表示不指定
         self.used_texts = set()  # 本场已用于出题的片段（文本），下一题要避开
+        # 指定了方向、但方向内资料不足导致退化为随机出题时置 True。
+        # 为什么要暴露：界面挂着「RAG」标签却在问 LangChain 工具，用户会以为是自己选错了。
+        self.topic_fallback = False
         self.last_active = None  # 最近一次活动时间（用于过期清理）
 
     def touch(self):
@@ -291,23 +304,35 @@ class InterviewService:
                     top_k=CONTEXT_PICK * 3 + len(used),
                     exclude=used,
                 )
-                # 相关度门槛：过滤掉与该方向相似度不足的片段，避免基于无关内容出题
-                related = [
-                    r for r in candidates
-                    if r["score"] >= SIMILARITY_THRESHOLD
-                ][:CONTEXT_PICK]
             except Exception:
-                related = []
-            if related:
-                context_lines = [f"【知识点片段】{r['content']}" for r in related]
-                points_text = "\n\n".join(context_lines)
-                self._mark_used(session, related)
-                return (
-                    f"面试方向是「{session.topic}」，请严格围绕这个方向出题。"
-                    "以下是知识库里与该方向最相关的内容，请基于这些内容出题：\n"
-                    + points_text
-                ), points_text
-            # 选了方向但方向内已经没有未考过的片段：退化为随机取未考过的，而不是重复已考过的
+                candidates = []
+
+            # 门槛分两层（详见 config.TOPIC_MIN_SCORE 的注释）：
+            #   绝对下限只回答"这个方向到底有没有资料"；
+            #   真正取片段用"top1 分数 × 比例"的相对门槛，跟着当前语料分布走。
+            # 用死值 0.48 当过滤条件会随语料变化失效 —— 删两篇资料后，
+            # 方向内只有 1 个片段过线，第 2 题起就只能退化成随机出题。
+            if candidates and candidates[0]["score"] >= TOPIC_MIN_SCORE:
+                cutoff = max(TOPIC_MIN_SCORE, candidates[0]["score"] * TOPIC_SCORE_RATIO)
+                related = [r for r in candidates if r["score"] >= cutoff][:CONTEXT_PICK]
+                if related:
+                    context_lines = [f"【知识点片段】{r['content']}" for r in related]
+                    points_text = "\n\n".join(context_lines)
+                    self._mark_used(session, related)
+                    return (
+                        f"面试方向是「{session.topic}」，请严格围绕这个方向出题。"
+                        "以下是知识库里与该方向最相关的内容，请基于这些内容出题：\n"
+                        + points_text
+                    ), points_text
+
+            # 走到这里说明方向内真的没素材了（最高分都不到绝对下限）。
+            # 降级成随机出题，但必须留下痕迹 —— 不能让界面挂着「RAG」标签却问 LangChain 工具。
+            session.topic_fallback = True
+            logger.warning(
+                f"[出题] 方向「{session.topic}」内已无素材"
+                f"（可用候选 {len(candidates)} 个，最高分 "
+                f"{candidates[0]['score'] if candidates else 0:.3f}），本次退化为随机出题"
+            )
 
         # 没指定方向（或方向内没素材了）：随机取未考过的知识库内容出题
         samples = self.vector_store.random_sample(CONTEXT_PICK, exclude=used)
@@ -782,6 +807,7 @@ class InterviewService:
         return {
             "session_id": session_id,
             "topic": session.topic,
+            "topic_fallback": session.topic_fallback,
             "finished": session.finished,
             "questions": questions,
         }
@@ -877,4 +903,6 @@ class InterviewService:
             "history": session.history,
             "finished": session.finished,
             "topic": session.topic,
+            # True = 方向内资料不足，已退化为随机出题（前端可据此提示，别让标签撒谎）
+            "topic_fallback": session.topic_fallback,
         }
