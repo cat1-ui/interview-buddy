@@ -1,0 +1,101 @@
+[
+  {
+    "topic": "RAG",
+    "original": {
+      "coverage": 1.0,
+      "duplicates": 0.0,
+      "files": 2.0,
+      "fallback_questions": 5.0,
+      "topic_hit": 0.3333333333333333,
+      "capacity": 15,
+      "distinct": 15.0,
+      "sessions": 3
+    },
+    "covered": {
+      "coverage": 1.0,
+      "duplicates": 0.0,
+      "files": 2.0,
+      "fallback_questions": 5.0,
+      "topic_hit": 0.24444444444444446,
+      "capacity": 15,
+      "distinct": 15.0,
+      "sessions": 3
+    },
+    "current": {
+      "coverage": 1.0,
+      "duplicates": 0.0,
+      "files": 2.0,
+      "fallback_questions": 0.0,
+      "topic_hit": 0.6,
+      "capacity": 15,
+      "distinct": 15.0,
+      "sessions": 3
+    }
+  },
+  {
+    "topic": "Agent",
+    "original": {
+      "coverage": 0.20000000000000004,
+      "duplicates": 12.0,
+      "files": 1.0,
+      "fallback_questions": 0.0,
+      "topic_hit": 1.0,
+      "capacity": 15,
+      "distinct": 3.0,
+      "sessions": 3
+    },
+    "covered": {
+      "coverage": 0.8666666666666667,
+      "duplicates": 0.0,
+      "files": 1.3333333333333333,
+      "fallback_questions": 1.0,
+      "topic_hit": 0.8461538461538461,
+      "capacity": 15,
+      "distinct": 13.0,
+      "sessions": 3
+    },
+    "current": {
+      "coverage": 1.0,
+      "duplicates": 0.0,
+      "files": 1.0,
+      "fallback_questions": 0.0,
+      "topic_hit": 1.0,
+      "capacity": 15,
+      "distinct": 15.0,
+      "sessions": 3
+    }
+  },
+  {
+    "topic": null,
+    "original": {
+      "coverage": 1.0,
+      "duplicates": 0.0,
+      "files": 2.0,
+      "fallback_questions": 0.0,
+      "topic_hit": null,
+      "capacity": 15,
+      "distinct": 15.0,
+      "sessions": 3
+    },
+    "covered": {
+      "coverage": 1.0,
+      "duplicates": 0.0,
+      "files": 2.0,
+      "fallback_questions": 0.0,
+      "topic_hit": null,
+      "capacity": 15,
+      "distinct": 15.0,
+      "sessions": 3
+    },
+    "current": {
+      "coverage": 1.0,
+      "duplicates": 0.0,
+      "files": 2.0,
+      "fallback_questions": 0.0,
+      "topic_hit": null,
+      "capacity": 15,
+      "distinct": 15.0,
+      "sessions": 3
+    }
+  }
+]
