@@ -10,7 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.vector_store import VectorStore
-from src.interview import InterviewService, MAX_QUESTIONS, MAX_FOLLOWUPS
+from src.interview import InterviewService, MAX_QUESTIONS, MAX_FOLLOWUPS, SESSION_TTL
 
 
 SCORE_JSON = '{"准确性": 8, "深度": 7, "表达清晰度": 9, "总评": "表现不错"}'
@@ -253,3 +253,164 @@ def test_question_generation_requires_knowledge_base():
         assert "知识库为空" in exc.detail
     else:
         raise AssertionError("空库时应抛出 400 错误")
+
+
+def test_ensure_can_answer_guards_stream_before_it_starts():
+    """流式接口靠它在推流前把 404/409 变成真实状态码（而不是 200 + 断流）。"""
+    from fastapi import HTTPException
+
+    svc, _ = _make_service()
+
+    try:
+        svc.ensure_can_answer("不存在的会话")
+    except HTTPException as exc:
+        assert exc.status_code == 404
+    else:
+        raise AssertionError("不存在的会话应抛 404")
+
+    sid = svc.new_session()
+    svc.start_question(sid)
+    svc.finish(sid)
+    try:
+        svc.ensure_can_answer(sid)
+    except HTTPException as exc:
+        assert exc.status_code == 409
+    else:
+        raise AssertionError("已结束的面试应抛 409")
+
+    # 正常会话：返回同一个 session 对象
+    sid2 = svc.new_session()
+    svc.start_question(sid2)
+    assert svc.ensure_can_answer(sid2) is svc.sessions[sid2]
+
+
+# ============ 出题覆盖 ============
+# 5 道题必须落在不同片段上，否则"换题"只是换个说法。
+
+def _make_service_with_chunks(n=30, topic=None):
+    vs = VectorStore()
+    vs.add(
+        texts=[f"知识点{i}" for i in range(n)],
+        metadatas=[{"filename": "kb.md"} for _ in range(n)],
+        vectors=[[1.0, i * 0.01] for i in range(n)],
+    )
+    client = FakeClient()
+    svc = InterviewService(_FakeRag(vs), client=client, embed_fn=lambda text: [1.0, 0.0])
+    sid = svc.new_session(topic=topic)
+    return svc, client, svc.sessions[sid]
+
+
+def test_topic_context_does_not_repeat_chunks():
+    """指定方向时：检索条件一样，但每次必须排除已用片段。"""
+    svc, _, session = _make_service_with_chunks(30, topic="RAG")
+
+    picked = []
+    for _ in range(MAX_QUESTIONS):
+        _, points = svc._build_question_context(session)
+        group = [line for line in points.split("\n\n") if line]
+        assert len(group) == 3
+        picked.extend(group)
+
+    assert len(picked) == MAX_QUESTIONS * 3
+    assert len(set(picked)) == MAX_QUESTIONS * 3  # 15 段互不重复
+    assert len(session.used_texts) == MAX_QUESTIONS * 3
+
+
+def test_random_context_does_not_repeat_chunks():
+    """不指定方向时：随机抽取同样要排除已用片段。"""
+    svc, _, session = _make_service_with_chunks(30)
+
+    picked = []
+    for _ in range(MAX_QUESTIONS):
+        _, points = svc._build_question_context(session)
+        picked.extend(line for line in points.split("\n\n") if line)
+
+    assert len(picked) == MAX_QUESTIONS * 3
+    assert len(set(picked)) == MAX_QUESTIONS * 3
+
+
+def test_context_falls_back_when_corpus_exhausted():
+    """小语料全考过之后不能返回空素材，否则最后几题会脱开资料（面试得能继续）。"""
+    svc, _, session = _make_service_with_chunks(3)
+
+    for _ in range(2):
+        extra_context, points_text = svc._build_question_context(session)
+        assert extra_context
+        assert points_text
+
+
+def test_generate_prompt_lists_asked_questions():
+    """第二题起，prompt 里必须带着"已问过的题"，否则同一个知识点会被换个说法再问一遍。"""
+    svc, client = _make_service()
+    session = svc.sessions[svc.new_session()]
+
+    q1 = svc._generate_question(session)
+    svc._generate_question(session)
+
+    gen_prompts = []
+    for call in client.chat.completions.calls:
+        text = " ".join(m["content"] for m in call["messages"])
+        if "请出一道" in text:
+            gen_prompts.append(text)
+
+    assert len(gen_prompts) == 2
+    assert q1 not in gen_prompts[0]  # 第一题时还没有"已问过"
+    assert q1 in gen_prompts[1]      # 第二题必须知道自己问过什么
+
+
+# ============ 会话回收 ============
+# 已结束的面试是"用户还要回来读"的数据，不能按业务状态回收，只能按时间回收。
+
+
+def test_finished_session_survives_new_session(monkeypatch):
+    """开下一场面试时，上一场的复盘不能被顺手删掉。
+
+    回归的是这个 bug：_cleanup_expired 里写了 `if s.finished`，
+    导致"点再来一场 -> 上一场复盘/收藏立刻 404"。
+    """
+    from src import bank as bank_mod
+
+    monkeypatch.setattr(bank_mod, "add_question", lambda **kwargs: (1, True))
+
+    svc, _ = _make_service()
+    sid = svc.new_session()
+    svc.start_question(sid)
+    svc.answer(sid, "RAG 是检索增强生成")
+    svc.finish(sid)
+
+    # 用户点"再来一场"
+    sid2 = svc.new_session()
+    assert sid2 != sid
+
+    # 旧会话必须还能被读到
+    assert sid in svc.sessions
+    review = svc.get_review(sid)
+    assert review["finished"] is True
+    assert len(review["questions"]) == 1
+    # 也还能收藏（否则用户"看完复盘再收藏"的路径永远走不通）
+    assert svc.collect_question(sid, index=1) == 1
+
+
+def test_expired_session_is_still_cleaned_up():
+    """按时间回收仍然要生效：超过 SESSION_TTL 无活动的会话必须被清掉。"""
+    svc, _ = _make_service()
+    sid = svc.new_session()
+    svc.start_question(sid)
+    svc.sessions[sid].last_active -= SESSION_TTL + 1
+
+    svc.new_session()
+    assert sid not in svc.sessions
+
+
+def test_reading_review_keeps_session_alive():
+    """读复盘本身也算活动：正在回看的人不该被判成僵尸。"""
+    svc, _ = _make_service()
+    sid = svc.new_session()
+    svc.start_question(sid)
+
+    # 模拟"隔了很久才回来点开复盘"：此刻已经超过 TTL
+    svc.sessions[sid].last_active -= SESSION_TTL + 1
+    svc.get_review(sid)  # 回看一次，应该续命
+
+    svc.new_session()
+    assert sid in svc.sessions

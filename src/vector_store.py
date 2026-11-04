@@ -49,9 +49,12 @@ class VectorStore:
         """当前存储的 chunk 数量"""
         return len(self.texts)
 
-    def search(self, query_vector, top_k=TOP_K):
+    def search(self, query_vector, top_k=TOP_K, exclude=None):
         """
         检索和 query_vector 最相似的 top_k 个 chunk。
+        exclude: 可选，一组 chunk 文本；命中这些文本的片段会被跳过。
+                 出题时用它避开"本场已经考过的片段"，实现考点覆盖。
+
         返回 [{content, filename, score}]
         """
         if self.vectors is None or len(self.texts) == 0:
@@ -71,8 +74,12 @@ class VectorStore:
         normalized_query = query_vec / query_norm
         similarities = normalized_vectors @ normalized_query  # 点积
 
-        # 取相似度最高的 top_k 个下标
-        top_indices = np.argsort(similarities)[::-1][:top_k]
+        # 先按相似度整体排序，排除已用片段后再截取 top_k
+        # （先截 top_k 再过滤会拿不满数量，已用片段多时尤其明显）
+        order = np.argsort(similarities)[::-1]
+        if exclude:
+            order = [int(i) for i in order if self.texts[int(i)] not in exclude]
+        top_indices = order[:top_k]
 
         # 记录 top-K 分数，用于以后观察"相关问题 vs 不相关问题"的分数分布，
         # 以便合理设定检索阈值（SIMILARITY_THRESHOLD）。
@@ -89,16 +96,23 @@ class VectorStore:
             })
         return results
 
-    def random_sample(self, n=3):
+    def random_sample(self, n=3, exclude=None):
         """
         随机取 n 段内容（用于面试出题时，随机抽取知识点）。
+        exclude: 可选，一组 chunk 文本；这些片段不会被抽中。
         返回 [{content, filename}]
         """
         import random
         if not self.texts:
             return []
-        n = min(n, len(self.texts))
-        indices = random.sample(range(len(self.texts)), n)
+        candidates = [
+            i for i, text in enumerate(self.texts)
+            if not exclude or text not in exclude
+        ]
+        if not candidates:
+            return []
+        n = min(n, len(candidates))
+        indices = random.sample(candidates, n)
         return [
             {
                 "content": self.texts[i],

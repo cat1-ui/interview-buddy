@@ -36,7 +36,6 @@ INTERVIEWER_SYSTEM = """你是一位严谨但友好的技术面试官，正在�
 
 出题要求：
 - 题目要具体、有深度，不要问太宽泛
-- 优先问候选人简历/项目相关的技术点（如果提供了相关资料）
 
 追问要求：
 - 候选人回答得浅（只说结论没说原理），就追问"为什么""底层是什么"
@@ -48,15 +47,18 @@ INTERVIEWER_SYSTEM = """你是一位严谨但友好的技术面试官，正在�
 """
 
 # 出题的 prompt
-GENERATE_QUESTION_PROMPT = """你是一位技术面试官，请出一道 AI 应用开发相关的面试题。
+# 注意：这里不再写死"围绕大模型原理/RAG/Agent/Python 之一"这类清单 ——
+# 它会和 extra_context 里的方向约束打架，让模型跑到资料之外去出题。
+# 题目来源统一交给 extra_context（按方向检索到的片段 / 随机抽取的片段）。
+GENERATE_QUESTION_PROMPT = """你是一位技术面试官，请出一道 AI 应用开发相关的面试题，题目必须落在下面提供的知识点片段之内。
 
 要求：
-1. 题目要具体、有深度
-2. 围绕以下方向之一：大模型原理、RAG、Agent/Function Calling、Prompt 工程、Python 后端
+1. 题目要具体、有深度，能区分"背过定义"和"真正理解"
+2. 只考片段里有的内容，不要引入片段之外的知识点
 3. 只输出题目本身，不要解释，不要加"面试官说"之类的前缀
+4. 如果下面列出了"本场已问过的题"，新题必须落在不同知识点上，不要换个说法重复
 
-{extra_context}
-"""
+{extra_context}{asked_block}"""
 
 # 追问/评价的 prompt
 EVALUATE_AND_RESPOND_PROMPT = """你是一位技术面试官。候选人刚才回答了你的问题，请根据下面的"指令"给出回应。
@@ -162,6 +164,20 @@ SHORT_SCORE_PROMPT = """你是一位技术面试官。候选人在面试中途�
 """
 
 
+def _asked_block(session):
+    """
+    把"本场已问过的题"拼成 prompt 片段。
+
+    为什么需要：光靠换片段还不够 —— 同一个知识点可以有两种问法（"chunk 怎么切" /
+    "切分粒度怎么定"），模型不知道前面问过什么，就会换汤不换药。
+    把已问题目直接摆给它看，是成本最低的语义去重。
+    """
+    if not session.questions:
+        return ""
+    lines = "\n".join(f"- {q['question']}" for q in session.questions)
+    return f"\n\n本场已问过的题（新题必须换一个知识点）：\n{lines}\n"
+
+
 class InterviewSession:
     """一场面试的会话状态"""
 
@@ -174,6 +190,7 @@ class InterviewSession:
         self.current_question = None  # 当前正在问的题（题目文本）
         self.followup_count = 0  # 当前题目已追问的次数
         self.topic = None      # 面试方向（如"RAG"），None 表示不指定
+        self.used_texts = set()  # 本场已用于出题的片段（文本），下一题要避开
         self.last_active = None  # 最近一次活动时间（用于过期清理）
 
     def touch(self):
@@ -190,6 +207,7 @@ class InterviewSession:
 # 面试参数
 MAX_QUESTIONS = 5      # 一场面试最多几道题
 MAX_FOLLOWUPS = 2      # 同一道题最多追问几次（候选人一题最多答 1 + 2 = 3 次）
+CONTEXT_PICK = 3       # 每次出题喂给模型的片段数（5 题共消耗约 15 个不同片段）
 SESSION_TTL = 2 * 60 * 60  # 会话过期时间（秒）：2 小时无活动视为僵尸会话
 
 
@@ -210,16 +228,23 @@ class InterviewService:
     def _cleanup_expired(self):
         """
         惰性清理过期会话（新建会话时调用）。
-        清理规则：
-            - 已结束的会话 -> 直接移除（它的价值要么已进题库，要么本就不该留）
-            - 超过 SESSION_TTL 秒无活动的进行中会话 -> 视为僵尸，移除
+
+        清理规则只有一条：超过 SESSION_TTL 秒没有任何活动 -> 视为僵尸，移除。
+
+        不要把 finished 当作回收条件。
+        finished 是业务语义（这场面试结束了，不能再答题），不是资源语义
+        （这个对象没人再要了）。面试结束后恰恰是引用峰值 —— 用户正要回来读复盘、
+        收藏题目。曾经这里写过 `if s.finished` 立即删除，结果是：
+        用户点"再来一场"，上一场复盘立刻 404，且与前端承诺的
+        "未收藏的将在 2 小时后清除"直接矛盾。
+
+        一句话：按"最后访问时间"淘汰，不按"业务状态"淘汰。
         """
         import time
         now = time.time()
         expired_ids = [
             sid for sid, s in self.sessions.items()
-            if s.finished
-            or (s.last_active is not None and now - s.last_active > SESSION_TTL)
+            if s.last_active is not None and now - s.last_active > SESSION_TTL
         ]
         for sid in expired_ids:
             self.sessions.pop(sid, None)
@@ -241,8 +266,17 @@ class InterviewService:
     def _build_question_context(self, session):
         """
         构造"出题素材"：有方向就用方向检索知识库，否则随机取知识库内容。
-        返回一段 extra_context 文本，供出题 prompt 使用。
+        返回 (extra_context, points_text)，并把本次用到的片段记入 session.used_texts。
+
+        为什么要排除已用片段：同一场面试里 5 道题如果共用同一批素材，
+        "换题"就只是换个说法 —— 覆盖不了任何新知识点。排除之后，
+        每道题都来自不同片段，才谈得上"考了 5 个不同考点"。
+
+        为什么按片段文本去重、而不是按向量下标：上传/删除资料会重建索引、
+        下标整体位移，文本才是稳定的标识；一场最多 15 条，集合查找的代价可以忽略。
         """
+        used = session.used_texts
+
         if session.topic:
             # 指定了方向：用方向去检索知识库，取最相关的内容
             try:
@@ -251,31 +285,49 @@ class InterviewService:
                     from src import embedding
                     embed_fn = embedding.embed_text
                 topic_vector = embed_fn(session.topic)
-                related = self.vector_store.search(topic_vector, top_k=3)
+                # 多取一些候选：已用过的片段会被跳过，要多取才能凑满 CONTEXT_PICK 个
+                candidates = self.vector_store.search(
+                    topic_vector,
+                    top_k=CONTEXT_PICK * 3 + len(used),
+                    exclude=used,
+                )
                 # 相关度门槛：过滤掉与该方向相似度不足的片段，避免基于无关内容出题
-                related = [r for r in related if r["score"] >= SIMILARITY_THRESHOLD]
+                related = [
+                    r for r in candidates
+                    if r["score"] >= SIMILARITY_THRESHOLD
+                ][:CONTEXT_PICK]
             except Exception:
                 related = []
             if related:
                 context_lines = [f"【知识点片段】{r['content']}" for r in related]
                 points_text = "\n\n".join(context_lines)
+                self._mark_used(session, related)
                 return (
                     f"面试方向是「{session.topic}」，请严格围绕这个方向出题。"
                     "以下是知识库里与该方向最相关的内容，请基于这些内容出题：\n"
                     + points_text
                 ), points_text
-            # 选了方向但检索不到相关内容：退化为随机取知识库出题（不出通用题）
+            # 选了方向但方向内已经没有未考过的片段：退化为随机取未考过的，而不是重复已考过的
 
-        # 没指定方向（或方向检索不到）：随机取知识库内容出题
-        samples = self.vector_store.random_sample(3)
+        # 没指定方向（或方向内没素材了）：随机取未考过的知识库内容出题
+        samples = self.vector_store.random_sample(CONTEXT_PICK, exclude=used)
+        if not samples:
+            # 语料太少、已经全部考过：退化为全库随机，保证面试还能继续下去
+            samples = self.vector_store.random_sample(CONTEXT_PICK)
         if samples:
             context_lines = [f"【知识点片段】{s['content']}" for s in samples]
             points_text = "\n\n".join(context_lines)
+            self._mark_used(session, samples)
             return (
                 "以下是候选人知识库里的一些内容，请围绕这些内容出题（考察候选人对这些知识的掌握）：\n"
                 + points_text
             ), points_text
         return "", ""
+
+    @staticmethod
+    def _mark_used(session, chunks):
+        """把用过的片段记进会话，下一次出题时排除。"""
+        session.used_texts.update(c["content"] for c in chunks)
 
     def _generate_question(self, session):
         """
@@ -287,7 +339,10 @@ class InterviewService:
                 raise HTTPException(status_code=503, detail="知识库正在构建中，请稍候再试")
             raise HTTPException(status_code=400, detail="知识库为空，请先上传资料再开始面试")
         extra_context, points_text = self._build_question_context(session)
-        prompt = GENERATE_QUESTION_PROMPT.format(extra_context=extra_context)
+        prompt = GENERATE_QUESTION_PROMPT.format(
+            extra_context=extra_context,
+            asked_block=_asked_block(session),
+        )
         try:
             response = self.client.chat.completions.create(
                 model=DEEPSEEK_MODEL,
@@ -449,7 +504,10 @@ class InterviewService:
                 raise HTTPException(status_code=503, detail="知识库正在构建中，请稍候再试")
             raise HTTPException(status_code=400, detail="知识库为空，请先上传资料再开始面试")
         extra_context, points_text = self._build_question_context(session)
-        prompt = GENERATE_QUESTION_PROMPT.format(extra_context=extra_context)
+        prompt = GENERATE_QUESTION_PROMPT.format(
+            extra_context=extra_context,
+            asked_block=_asked_block(session),
+        )
         try:
             stream = self.client.chat.completions.create(
                 model=DEEPSEEK_MODEL,
@@ -498,6 +556,21 @@ class InterviewService:
             "followup_count": session.followup_count,
         }
 
+    def ensure_can_answer(self, session_id):
+        """
+        校验"这场面试现在还能不能答题"，返回 session；不能则抛 404 / 409。
+
+        为什么单独抽出来：SSE 一旦开始推流，状态码就改不了了。
+        所以"会话不存在""已结束"这类判断必须发生在构造 StreamingResponse 之前，
+        由路由直接调用本方法 —— 留在生成器里的话，客户端只会收到 200 + 断流。
+        """
+        session = self.sessions.get(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="面试会话不存在")
+        if session.finished:
+            raise HTTPException(status_code=409, detail="面试已结束，无法继续回答")
+        return session
+
     def answer(self, session_id, answer_text):
         """
         候选人回答问题。按优先级判断：
@@ -506,11 +579,7 @@ class InterviewService:
             判断3：否则追问（含最后一题，追问满后才收尾）
         返回 {"reply": 回应文本, "finished": 是否已结束}
         """
-        session = self.sessions.get(session_id)
-        if not session:
-            raise HTTPException(status_code=404, detail="面试会话不存在")
-        if session.finished:
-            raise HTTPException(status_code=409, detail="面试已结束，无法继续回答")
+        session = self.ensure_can_answer(session_id)
 
         session.touch()
         # 记录候选人的回答
@@ -570,11 +639,7 @@ class InterviewService:
         """
         from src.streaming import meta_event, delta_event, done_event
 
-        session = self.sessions.get(session_id)
-        if not session:
-            raise HTTPException(status_code=404, detail="面试会话不存在")
-        if session.finished:
-            raise HTTPException(status_code=409, detail="面试已结束，无法继续回答")
+        session = self.ensure_can_answer(session_id)
 
         session.touch()
         self._append(session, "candidate", answer_text)
@@ -669,6 +734,7 @@ class InterviewService:
         session = self.sessions.get(session_id)
         if not session:
             raise HTTPException(status_code=404, detail="面试会话不存在")
+        session.touch()  # 收藏也算活动，别让正在复盘的人被判成僵尸
 
         if index is None:
             q = session.current_q
@@ -703,6 +769,7 @@ class InterviewService:
         session = self.sessions.get(session_id)
         if not session:
             raise HTTPException(status_code=404, detail="面试会话不存在")
+        session.touch()  # 读复盘也算活动（否则"正在回看"的会话会被 TTL 误杀）
 
         questions = [
             {
@@ -725,6 +792,7 @@ class InterviewService:
         if not session:
             raise HTTPException(status_code=404, detail="面试会话不存在")
 
+        session.touch()  # 打分也是活动，保证刚打完分的会话不会被立刻回收
         session.finished = True
 
         # 把历史拼成文本
@@ -801,6 +869,7 @@ class InterviewService:
         session = self.sessions.get(session_id)
         if not session:
             raise HTTPException(status_code=404, detail="面试会话不存在")
+        session.touch()  # 刷新页面找回进度也算活动
         return {
             "question_count": session.question_count,
             "followup_count": session.followup_count,
